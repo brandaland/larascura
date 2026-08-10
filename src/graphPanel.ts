@@ -113,8 +113,11 @@ export class GraphPanel {
   }
 
   private html(): string {
-    const token = nonce();
-    return `<!doctype html>
+    return createGraphHtml(nonce());
+  }
+}
+
+export const createGraphHtml = (token: string): string => `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -136,7 +139,27 @@ export class GraphPanel {
     .tool-button:hover { background: var(--vscode-button-hoverBackground); }
     .zoom { width: 100px; accent-color: #7c3aed; }
     .stats { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: 12px; white-space: nowrap; }
-    .workspace { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
+    .workspace { min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr) 340px; }
+    .navigator { min-width: 0; overflow-y: auto; padding: 12px 8px; border-right: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
+    .nav-heading { margin: 5px 8px 10px; color: var(--vscode-descriptionForeground); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    .nav-section { margin: 7px 0; }
+    .nav-section > summary, .nav-module > summary { display: flex; align-items: center; min-height: 30px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 650; list-style: none; }
+    .nav-section > summary::-webkit-details-marker, .nav-module > summary::-webkit-details-marker { display: none; }
+    .nav-section > summary::before, .nav-module > summary::before { content: '›'; width: 16px; color: var(--vscode-descriptionForeground); transition: transform .15s ease; }
+    .nav-section[open] > summary::before, .nav-module[open] > summary::before { transform: rotate(90deg); }
+    .nav-module { margin-left: 8px; }
+    .nav-module > summary { min-height: 28px; font-weight: 500; }
+    .nav-module > summary .nav-count { margin-left: auto; }
+    .nav-button { display: grid; width: 100%; min-height: 30px; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 5px 8px 5px 24px; color: var(--vscode-foreground); background: transparent; border: 0; border-radius: 6px; text-align: left; cursor: pointer; }
+    .nav-button.root { padding-left: 8px; font-weight: 650; }
+    .nav-button.route-item { padding-left: 32px; font-family: var(--vscode-editor-font-family); font-size: 10px; }
+    .nav-button:hover { background: var(--vscode-list-hoverBackground); }
+    .nav-button.active { color: var(--vscode-list-activeSelectionForeground); background: var(--vscode-list-activeSelectionBackground); }
+    .nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nav-count { color: var(--vscode-descriptionForeground); font-size: 10px; font-variant-numeric: tabular-nums; }
+    .scope-bar { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; min-height: 38px; gap: 8px; padding: 6px 12px; color: var(--vscode-descriptionForeground); background: color-mix(in srgb, var(--vscode-editor-background) 92%, transparent); border-bottom: 1px solid var(--vscode-panel-border); backdrop-filter: blur(8px); font-size: 11px; }
+    .scope-name { color: var(--vscode-foreground); font-weight: 650; }
+    .scope-note { margin-left: auto; }
     .viewport { position: relative; overflow: auto; background-image: radial-gradient(var(--vscode-panel-border) 0.7px, transparent 0.7px); background-size: 18px 18px; }
     .stage { position: relative; min-width: 1100px; min-height: 760px; transform-origin: top left; }
     .edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
@@ -160,10 +183,15 @@ export class GraphPanel {
     .source-button { width: 100%; margin-top: 14px; }
     .warning { padding: 8px 10px; color: var(--vscode-editorWarning-foreground); background: var(--vscode-inputValidation-warningBackground); border: 1px solid var(--vscode-inputValidation-warningBorder); border-radius: 6px; font-size: 11px; }
     .hidden { display: none !important; }
-    @media (max-width: 850px) {
-      .workspace { grid-template-columns: 1fr; }
+    @media (max-width: 1050px) {
+      .workspace { grid-template-columns: 220px 1fr; }
       .detail { position: absolute; right: 0; bottom: 0; width: min(88vw, 340px); max-height: 55vh; border-top: 1px solid var(--vscode-panel-border); box-shadow: -8px -8px 24px rgba(0,0,0,.2); }
       .stats { display: none; }
+    }
+    @media (max-width: 650px) {
+      .workspace { grid-template-columns: 180px 1fr; }
+      .brand span:last-child, .zoom { display: none; }
+      .search { width: 100%; }
     }
   </style>
 </head>
@@ -177,7 +205,9 @@ export class GraphPanel {
       <span id="stats" class="stats">Waiting for scan…</span>
     </header>
     <div class="workspace">
+      <nav id="tree" class="navigator" aria-label="Laravel architecture categories"></nav>
       <main id="viewport" class="viewport" aria-label="Laravel architecture graph">
+        <div id="scopeBar" class="scope-bar"><span>Scope</span><span id="scopeName" class="scope-name">Overview</span><span id="scopeNote" class="scope-note"></span></div>
         <div id="stage" class="stage"><svg id="edges" class="edges" aria-hidden="true"></svg><div id="nodes"></div></div>
       </main>
       <aside id="detail" class="detail" aria-live="polite">
@@ -197,15 +227,25 @@ export class GraphPanel {
       ['route'], ['middleware'], ['controller'], ['service', 'repository', 'provider'],
       ['model', 'class'], ['event', 'job', 'listener', 'command']
     ];
+    const kindLabels = {
+      route: 'Routes', middleware: 'Middleware', controller: 'Controllers',
+      service: 'Services', repository: 'Repositories', model: 'Models',
+      job: 'Jobs', event: 'Events', listener: 'Listeners',
+      provider: 'Providers', command: 'Commands', class: 'Other classes'
+    };
     let graph = null;
     let positions = new Map();
     let selected = null;
+    let scope = { type: 'overview' };
     const stage = document.getElementById('stage');
     const nodesRoot = document.getElementById('nodes');
     const edgesRoot = document.getElementById('edges');
+    const treeRoot = document.getElementById('tree');
     const detail = document.getElementById('detail');
     const search = document.getElementById('search');
     const stats = document.getElementById('stats');
+    const scopeName = document.getElementById('scopeName');
+    const scopeNote = document.getElementById('scopeNote');
     const svgNs = 'http://www.w3.org/2000/svg';
 
     function text(tag, value, className) {
@@ -215,15 +255,183 @@ export class GraphPanel {
       return element;
     }
 
+    function routeModule(node) {
+      const uri = node.label.replace(/^[A-Z]+\\s+\\/?/, '');
+      return uri.split('/').filter(Boolean)[0] || 'root';
+    }
+
+    function scopeKey(value) {
+      return value.type + ':' + (value.value || '');
+    }
+
+    function connected(seedIds, depth, limit) {
+      const included = new Set(seedIds);
+      let frontier = new Set(seedIds);
+      for (let level = 0; level < depth && frontier.size && included.size < limit; level++) {
+        const next = new Set();
+        for (const edge of graph.edges) {
+          if (frontier.has(edge.source) && !included.has(edge.target)) next.add(edge.target);
+          if (frontier.has(edge.target) && !included.has(edge.source)) next.add(edge.source);
+          if (included.size + next.size >= limit) break;
+        }
+        for (const id of next) included.add(id);
+        frontier = next;
+      }
+      return included;
+    }
+
+    function overviewGraph() {
+      const counts = new Map();
+      for (const node of graph.nodes) counts.set(node.kind, (counts.get(node.kind) || 0) + 1);
+      const nodes = [...counts.entries()].map(([kind, count]) => ({
+        id: 'summary:' + kind,
+        label: (kindLabels[kind] || kind) + ' · ' + count,
+        kind,
+        aggregateKind: kind,
+        qualifiedName: count + ' architecture nodes',
+        summary: 'This is a category summary. Open it to inspect only this Laravel layer and its direct connections.',
+        syntax: 'LaraScura grouped these nodes by Laravel conventions, class names, inheritance, and source folders.',
+        location: null
+      }));
+      const nodeKinds = new Map(graph.nodes.map(node => [node.id, node.kind]));
+      const grouped = new Map();
+      for (const edge of graph.edges) {
+        const from = nodeKinds.get(edge.source);
+        const to = nodeKinds.get(edge.target);
+        if (!from || !to || from === to) continue;
+        const key = from + '->' + to;
+        const current = grouped.get(key) || { from, to, count: 0 };
+        current.count += 1;
+        grouped.set(key, current);
+      }
+      const edges = [...grouped.values()].map(item => ({
+        id: 'summary-edge:' + item.from + '->' + item.to,
+        source: 'summary:' + item.from,
+        target: 'summary:' + item.to,
+        kind: 'calls',
+        label: item.count + ' connections',
+        explanation: (kindLabels[item.from] || item.from) + ' has ' + item.count + ' mapped connections to ' + (kindLabels[item.to] || item.to) + '.',
+        confidence: 'exact',
+        aggregate: true,
+        location: null
+      }));
+      return { nodes, edges, truncated: false };
+    }
+
+    function scopedGraph() {
+      const query = search.value.trim().toLowerCase();
+      if (query) {
+        const matches = graph.nodes.filter(node =>
+          [node.label, node.kind, node.qualifiedName].filter(Boolean).some(value => value.toLowerCase().includes(query))
+        ).slice(0, 80);
+        const ids = connected(matches.map(node => node.id), 1, 180);
+        return {
+          nodes: graph.nodes.filter(node => ids.has(node.id)),
+          edges: graph.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target)),
+          truncated: matches.length >= 80
+        };
+      }
+      if (scope.type === 'overview') return overviewGraph();
+      if (scope.type === 'all') return { nodes: graph.nodes, edges: graph.edges, truncated: false };
+
+      let seeds = [];
+      let depth = 1;
+      let limit = 220;
+      if (scope.type === 'kind') {
+        seeds = graph.nodes.filter(node => node.kind === scope.value).slice(0, limit).map(node => node.id);
+      } else if (scope.type === 'module') {
+        seeds = graph.nodes.filter(node => node.kind === 'route' && routeModule(node) === scope.value).map(node => node.id);
+        depth = 4;
+        limit = 240;
+      } else if (scope.type === 'route') {
+        seeds = [scope.value];
+        depth = 5;
+        limit = 120;
+      }
+      const ids = connected(seeds, depth, limit);
+      return {
+        nodes: graph.nodes.filter(node => ids.has(node.id)),
+        edges: graph.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target)),
+        truncated: ids.size >= limit
+      };
+    }
+
+    function navButton(label, count, nextScope, className) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'nav-button ' + (className || '');
+      if (scopeKey(scope) === scopeKey(nextScope)) button.classList.add('active');
+      button.title = label;
+      button.append(text('span', label, 'nav-label'));
+      if (count !== undefined) button.append(text('span', String(count), 'nav-count'));
+      button.addEventListener('click', () => {
+        scope = nextScope;
+        selected = null;
+        search.value = '';
+        renderTree();
+        render();
+      });
+      return button;
+    }
+
+    function renderTree() {
+      treeRoot.replaceChildren(text('div', 'Project map', 'nav-heading'));
+      treeRoot.append(navButton('Overview', graph.nodes.length, { type: 'overview' }, 'root'));
+
+      const moduleRoutes = new Map();
+      for (const route of graph.nodes.filter(node => node.kind === 'route')) {
+        const module = routeModule(route);
+        const routes = moduleRoutes.get(module) || [];
+        routes.push(route);
+        moduleRoutes.set(module, routes);
+      }
+      const modules = document.createElement('details');
+      modules.className = 'nav-section';
+      modules.open = scope.type === 'module' || scope.type === 'route';
+      modules.append(text('summary', 'Request flows'));
+      [...moduleRoutes.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([module, routes]) => {
+        const branch = document.createElement('details');
+        branch.className = 'nav-module';
+        branch.open = (scope.type === 'module' && scope.value === module)
+          || (scope.type === 'route' && routes.some(route => route.id === scope.value));
+        const summary = text('summary', module);
+        summary.append(text('span', String(routes.length), 'nav-count'));
+        branch.append(summary, navButton('All ' + module + ' flows', routes.length, { type: 'module', value: module }));
+        routes.sort((left, right) => left.label.localeCompare(right.label)).forEach(route => {
+          branch.append(navButton(route.label, undefined, { type: 'route', value: route.id }, 'route-item'));
+        });
+        modules.append(branch);
+      });
+      treeRoot.append(modules);
+
+      const architecture = document.createElement('details');
+      architecture.className = 'nav-section';
+      architecture.open = scope.type === 'kind';
+      architecture.append(text('summary', 'Architecture layers'));
+      const kindCounts = new Map();
+      for (const node of graph.nodes) kindCounts.set(node.kind, (kindCounts.get(node.kind) || 0) + 1);
+      [...kindCounts.entries()].sort(([left], [right]) =>
+        (kindLabels[left] || left).localeCompare(kindLabels[right] || right)
+      ).forEach(([kind, count]) => {
+        architecture.append(navButton(kindLabels[kind] || kind, count, { type: 'kind', value: kind }));
+      });
+      treeRoot.append(architecture);
+
+      const advanced = document.createElement('details');
+      advanced.className = 'nav-section';
+      advanced.open = scope.type === 'all';
+      advanced.append(text('summary', 'Advanced'));
+      advanced.append(navButton('All nodes', graph.nodes.length, { type: 'all' }));
+      treeRoot.append(advanced);
+    }
+
     function render() {
       if (!graph) return;
       nodesRoot.replaceChildren();
       edgesRoot.replaceChildren();
       positions = new Map();
-      const query = search.value.trim().toLowerCase();
-      const visible = graph.nodes.filter(node =>
-        !query || [node.label, node.kind, node.qualifiedName].filter(Boolean).some(value => value.toLowerCase().includes(query))
-      );
+      const current = scopedGraph();
+      const visible = current.nodes;
       const visibleIds = new Set(visible.map(node => node.id));
       const columnWidth = 230;
       const rowHeight = 86;
@@ -258,7 +466,7 @@ export class GraphPanel {
       stage.style.height = height + 'px';
       edgesRoot.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
 
-      graph.edges.filter(edge => visibleIds.has(edge.source) && visibleIds.has(edge.target)).forEach(edge => {
+      current.edges.filter(edge => visibleIds.has(edge.source) && visibleIds.has(edge.target)).forEach(edge => {
         const from = positions.get(edge.source);
         const to = positions.get(edge.target);
         if (!from || !to) return;
@@ -283,7 +491,16 @@ export class GraphPanel {
         edgesRoot.appendChild(group);
       });
 
-      stats.textContent = visible.length + '/' + graph.nodes.length + ' nodes · ' + graph.edges.length + ' connections';
+      const labels = {
+        overview: 'Architecture overview',
+        module: 'Module · ' + (scope.value || ''),
+        route: graph.nodes.find(node => node.id === scope.value)?.label || 'Request flow',
+        kind: kindLabels[scope.value] || scope.value,
+        all: 'All nodes'
+      };
+      scopeName.textContent = search.value.trim() ? 'Search results' : labels[scope.type];
+      scopeNote.textContent = current.truncated ? 'Result limited for readability' : visible.length + ' nodes · ' + current.edges.length + ' connections';
+      stats.textContent = visible.length + '/' + graph.nodes.length + ' nodes';
     }
 
     function section(title, body, code) {
@@ -305,6 +522,13 @@ export class GraphPanel {
     }
 
     function showNode(node) {
+      if (node.aggregateKind) {
+        scope = { type: 'kind', value: node.aggregateKind };
+        selected = null;
+        renderTree();
+        render();
+        return;
+      }
       selected = node.id;
       render();
       detail.replaceChildren();
@@ -324,24 +548,31 @@ export class GraphPanel {
     function showEdge(edge) {
       selected = null;
       render();
-      const source = graph.nodes.find(node => node.id === edge.source);
-      const target = graph.nodes.find(node => node.id === edge.target);
+      const displayed = scopedGraph().nodes;
+      const source = displayed.find(node => node.id === edge.source);
+      const target = displayed.find(node => node.id === edge.target);
       detail.replaceChildren();
-      detail.append(
+      const content = [
         text('span', edge.kind, 'badge'),
         text('h2', (source?.label || '?') + ' → ' + (target?.label || '?')),
         text('p', edge.confidence === 'exact' ? 'Exact static match' : 'Inferred static match', 'qualified'),
         section('Why are they connected?', edge.explanation),
-        section('Syntax evidence', edge.label, edge.location.preview),
-        section('Source', edge.location.file + ':' + edge.location.line),
-        sourceButton('edge', edge.id)
-      );
+        section('Syntax evidence', edge.label, edge.location?.preview)
+      ];
+      if (edge.location) {
+        content.push(
+          section('Source', edge.location.file + ':' + edge.location.line),
+          sourceButton('edge', edge.id)
+        );
+      }
+      detail.append(...content);
     }
 
     window.addEventListener('message', event => {
       if (event.data?.type !== 'graph') return;
       graph = event.data.graph;
       document.title = 'LaraScura — ' + graph.projectName;
+      renderTree();
       render();
       if (graph.warnings.length) {
         const warning = text('div', graph.warnings.length + ' dynamic or unresolved connection(s) were kept as warnings instead of being guessed.', 'warning');
@@ -358,5 +589,3 @@ export class GraphPanel {
   </script>
 </body>
 </html>`;
-  }
-}

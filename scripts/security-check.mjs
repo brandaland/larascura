@@ -9,6 +9,8 @@ const failures = [];
 
 if (!panel.includes("default-src 'none'")) failures.push('Webview CSP must default to none.');
 if (!panel.includes('localResourceRoots: []')) failures.push('Webview local resource access must be disabled.');
+if (!panel.includes("let scope = { type: 'overview' }")) failures.push('The graph must open in a scoped overview, not the full-node view.');
+if (!panel.includes('Request flows') || !panel.includes('Architecture layers')) failures.push('The graph must expose category-tree navigation.');
 if (/https?:\/\//.test(panelWithoutSvgNamespace)) failures.push('Webview must not reference external network resources.');
 if (/child_process|exec\(|spawn\(/.test(extension + scanner)) failures.push('Extension must not execute workspace code or processes.');
 

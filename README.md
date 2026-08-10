@@ -20,6 +20,8 @@ It is designed for developers who want to understand Laravel—not merely browse
 - Explains Laravel concepts in English or Turkish
 - Watches `app/` and `routes/` for changes
 - Packages as a normal installable VSIX
+- Starts with a compact architecture overview instead of a full-graph hairball
+- Navigates through request-flow modules, individual routes, and architecture layers
 
 ## Privacy and security
 

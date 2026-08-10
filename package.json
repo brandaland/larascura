@@ -2,7 +2,7 @@
   "name": "larascura",
   "displayName": "LaraScura",
   "description": "Visualize Laravel architecture, follow request flows, and understand the syntax.",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "publisher": "ozkan",
   "license": "MIT",
   "engines": {
@@ -131,10 +131,12 @@
     "package:vsix": "npx vsce package --no-dependencies"
   },
   "devDependencies": {
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.95.0",
     "@vscode/vsce": "^3.6.0",
     "esbuild": "^0.25.0",
+    "jsdom": "^30.0.1",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
   }
