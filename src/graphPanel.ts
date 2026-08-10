@@ -137,9 +137,12 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .search:focus { border-color: var(--vscode-focusBorder); }
     .tool-button { height: 32px; padding: 0 12px; color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: 0; border-radius: 6px; cursor: pointer; }
     .tool-button:hover { background: var(--vscode-button-hoverBackground); }
+    .tool-button.secondary { color: var(--vscode-foreground); background: var(--vscode-button-secondaryBackground); }
+    .tool-button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
     .zoom { width: 100px; accent-color: #7c3aed; }
     .stats { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: 12px; white-space: nowrap; }
-    .workspace { min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr) 340px; }
+    .workspace { position: relative; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr) 340px; }
+    .workspace.inspector-collapsed { grid-template-columns: 250px minmax(0, 1fr); }
     .navigator { min-width: 0; overflow-y: auto; padding: 12px 8px; border-right: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
     .nav-heading { margin: 5px 8px 10px; color: var(--vscode-descriptionForeground); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
     .nav-section { margin: 7px 0; }
@@ -166,12 +169,23 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .edge-visible { stroke: var(--vscode-descriptionForeground); stroke-width: 1.2; opacity: .42; fill: none; }
     .edge-hit { stroke: transparent; stroke-width: 14; fill: none; pointer-events: stroke; cursor: pointer; }
     .edge-group:hover .edge-visible, .edge-group:focus .edge-visible { stroke: #a78bfa; stroke-width: 2.4; opacity: 1; }
-    .node { position: absolute; width: 172px; min-height: 58px; padding: 9px 10px; text-align: left; color: var(--vscode-foreground); background: var(--vscode-editorWidget-background); border: 1px solid var(--node-color); border-left-width: 4px; border-radius: 8px; box-shadow: 0 3px 12px rgba(0,0,0,.16); cursor: pointer; }
+    .node { position: absolute; width: 172px; min-height: 58px; padding: 9px 10px; text-align: left; color: var(--vscode-foreground); background: var(--vscode-editorWidget-background); border: 1px solid var(--node-color); border-left-width: 4px; border-radius: 8px; box-shadow: 0 3px 12px rgba(0,0,0,.16); cursor: grab; touch-action: none; user-select: none; }
+    .node.dragging { z-index: 3; cursor: grabbing; box-shadow: 0 8px 24px rgba(0,0,0,.28); }
     .node:hover, .node:focus-visible, .node.active { outline: 2px solid var(--node-color); outline-offset: 2px; }
     .node-kind { display: block; margin-bottom: 4px; color: var(--node-color); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
     .node-label { display: block; overflow: hidden; font-size: 12px; font-weight: 650; line-height: 1.3; text-overflow: ellipsis; }
     .column-label { position: absolute; top: 18px; width: 172px; color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-align: center; text-transform: uppercase; }
-    .detail { min-width: 0; overflow-y: auto; padding: 18px; border-left: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
+    .detail { min-width: 0; overflow-y: auto; border-left: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
+    .detail.closed { display: none; }
+    .detail.minimized { position: absolute; z-index: 8; right: 12px; bottom: 12px; width: min(360px, calc(100% - 24px)); overflow: hidden; border: 1px solid var(--vscode-panel-border); border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,.25); }
+    .detail.minimized .detail-content { display: none; }
+    .detail-toolbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; min-height: 38px; padding: 0 8px 0 12px; background: var(--vscode-sideBar-background); border-bottom: 1px solid var(--vscode-panel-border); }
+    .detail.minimized .detail-toolbar { border-bottom: 0; }
+    .detail-title { min-width: 0; overflow: hidden; font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .detail-actions { display: flex; gap: 2px; margin-left: auto; }
+    .detail-action { display: grid; width: 28px; height: 28px; padding: 0; place-items: center; color: var(--vscode-foreground); background: transparent; border: 0; border-radius: 5px; cursor: pointer; }
+    .detail-action:hover { background: var(--vscode-toolbar-hoverBackground); }
+    .detail-content { padding: 18px; }
     .detail-empty { margin-top: 28px; color: var(--vscode-descriptionForeground); line-height: 1.6; }
     .badge { display: inline-flex; padding: 3px 7px; border-radius: 999px; color: white; background: var(--detail-color, #7c3aed); font-size: 10px; font-weight: 700; text-transform: uppercase; }
     .detail h2 { margin: 12px 0 4px; font-size: 18px; overflow-wrap: anywhere; }
@@ -185,7 +199,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .hidden { display: none !important; }
     @media (max-width: 1050px) {
       .workspace { grid-template-columns: 220px 1fr; }
-      .detail { position: absolute; right: 0; bottom: 0; width: min(88vw, 340px); max-height: 55vh; border-top: 1px solid var(--vscode-panel-border); box-shadow: -8px -8px 24px rgba(0,0,0,.2); }
+      .detail:not(.closed):not(.minimized) { position: absolute; z-index: 7; right: 0; bottom: 0; width: min(88vw, 340px); max-height: 55vh; border-top: 1px solid var(--vscode-panel-border); box-shadow: -8px -8px 24px rgba(0,0,0,.2); }
       .stats { display: none; }
     }
     @media (max-width: 650px) {
@@ -201,17 +215,27 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       <div class="brand"><span class="brand-mark">L</span><span>LaraScura</span></div>
       <input id="search" class="search" type="search" placeholder="Filter routes, classes, models…" aria-label="Filter architecture nodes">
       <button id="refresh" class="tool-button" type="button">Refresh</button>
+      <button id="resetLayout" class="tool-button secondary" type="button" title="Return nodes to the automatic layout">Reset layout</button>
       <input id="zoom" class="zoom" type="range" min="55" max="135" value="100" aria-label="Graph zoom">
       <span id="stats" class="stats">Waiting for scan…</span>
     </header>
-    <div class="workspace">
+    <div id="workspace" class="workspace">
       <nav id="tree" class="navigator" aria-label="Laravel architecture categories"></nav>
       <main id="viewport" class="viewport" aria-label="Laravel architecture graph">
         <div id="scopeBar" class="scope-bar"><span>Scope</span><span id="scopeName" class="scope-name">Overview</span><span id="scopeNote" class="scope-note"></span></div>
         <div id="stage" class="stage"><svg id="edges" class="edges" aria-hidden="true"></svg><div id="nodes"></div></div>
       </main>
       <aside id="detail" class="detail" aria-live="polite">
-        <div class="detail-empty"><strong>Explore how Laravel works.</strong><br>Select a node or connection to see why it exists, which syntax created it, and where it lives in your project.</div>
+        <header class="detail-toolbar">
+          <span id="detailTitle" class="detail-title">Inspector</span>
+          <span class="detail-actions">
+            <button id="minimizeDetail" class="detail-action" type="button" title="Minimize Inspector" aria-label="Minimize Inspector">−</button>
+            <button id="closeDetail" class="detail-action" type="button" title="Close Inspector" aria-label="Close Inspector">×</button>
+          </span>
+        </header>
+        <div id="detailContent" class="detail-content">
+          <div class="detail-empty"><strong>Explore how Laravel works.</strong><br>Select a node or connection to see why it exists, which syntax created it, and where it lives in your project.</div>
+        </div>
       </aside>
     </div>
   </div>
@@ -235,13 +259,19 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     };
     let graph = null;
     let positions = new Map();
+    let manualPositions = new Map();
     let selected = null;
     let scope = { type: 'overview' };
+    let zoomLevel = 1;
+    let inspectorState = 'open';
+    const workspace = document.getElementById('workspace');
     const stage = document.getElementById('stage');
     const nodesRoot = document.getElementById('nodes');
     const edgesRoot = document.getElementById('edges');
     const treeRoot = document.getElementById('tree');
     const detail = document.getElementById('detail');
+    const detailContent = document.getElementById('detailContent');
+    const detailTitle = document.getElementById('detailTitle');
     const search = document.getElementById('search');
     const stats = document.getElementById('stats');
     const scopeName = document.getElementById('scopeName');
@@ -262,6 +292,38 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
 
     function scopeKey(value) {
       return value.type + ':' + (value.value || '');
+    }
+
+    function layoutKey(nodeId) {
+      const query = search.value.trim().toLowerCase();
+      return (query ? 'search:' + query : scopeKey(scope)) + '|' + nodeId;
+    }
+
+    function persistUiState() {
+      vscode.setState({
+        manualPositions: [...manualPositions.entries()],
+        inspectorState
+      });
+    }
+
+    function restoreUiState() {
+      const saved = vscode.getState() || {};
+      if (Array.isArray(saved.manualPositions)) manualPositions = new Map(saved.manualPositions);
+      if (['open', 'minimized', 'closed'].includes(saved.inspectorState)) inspectorState = saved.inspectorState;
+      setInspectorState(inspectorState, false);
+    }
+
+    function setInspectorState(nextState, persist = true) {
+      inspectorState = nextState;
+      detail.classList.toggle('closed', nextState === 'closed');
+      detail.classList.toggle('minimized', nextState === 'minimized');
+      workspace.classList.toggle('inspector-collapsed', nextState !== 'open');
+      if (persist) persistUiState();
+    }
+
+    function openInspector(title) {
+      detailTitle.textContent = title || 'Inspector';
+      setInspectorState('open');
     }
 
     function connected(seedIds, depth, limit) {
@@ -425,48 +487,9 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       treeRoot.append(advanced);
     }
 
-    function render() {
-      if (!graph) return;
-      nodesRoot.replaceChildren();
+    function renderEdges(edges, visibleIds) {
       edgesRoot.replaceChildren();
-      positions = new Map();
-      const current = scopedGraph();
-      const visible = current.nodes;
-      const visibleIds = new Set(visible.map(node => node.id));
-      const columnWidth = 230;
-      const rowHeight = 86;
-      let maxRows = 1;
-
-      layers.forEach((kinds, column) => {
-        const group = visible.filter(node => kinds.includes(node.kind));
-        maxRows = Math.max(maxRows, group.length);
-        const label = text('div', kinds.join(' / '), 'column-label');
-        label.style.left = (34 + column * columnWidth) + 'px';
-        nodesRoot.appendChild(label);
-        group.forEach((node, row) => {
-          const x = 34 + column * columnWidth;
-          const y = 54 + row * rowHeight;
-          positions.set(node.id, { x, y });
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'node' + (selected === node.id ? ' active' : '');
-          button.style.left = x + 'px';
-          button.style.top = y + 'px';
-          button.style.setProperty('--node-color', colors[node.kind] || colors.class);
-          button.dataset.nodeId = node.id;
-          button.append(text('span', node.kind, 'node-kind'), text('span', node.label, 'node-label'));
-          button.addEventListener('click', () => showNode(node));
-          nodesRoot.appendChild(button);
-        });
-      });
-
-      const width = Math.max(1100, 70 + layers.length * columnWidth);
-      const height = Math.max(760, 100 + maxRows * rowHeight);
-      stage.style.width = width + 'px';
-      stage.style.height = height + 'px';
-      edgesRoot.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
-
-      current.edges.filter(edge => visibleIds.has(edge.source) && visibleIds.has(edge.target)).forEach(edge => {
+      edges.filter(edge => visibleIds.has(edge.source) && visibleIds.has(edge.target)).forEach(edge => {
         const from = positions.get(edge.source);
         const to = positions.get(edge.target);
         if (!from || !to) return;
@@ -490,6 +513,102 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         group.append(visibleLine, hit);
         edgesRoot.appendChild(group);
       });
+    }
+
+    function makeDraggable(button, node, current, visibleIds) {
+      let drag = null;
+      let suppressClick = false;
+      button.addEventListener('pointerdown', event => {
+        if (event.button !== 0) return;
+        const origin = positions.get(node.id);
+        if (!origin) return;
+        drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: origin.x, y: origin.y, moved: false };
+        button.setPointerCapture?.(event.pointerId);
+      });
+      button.addEventListener('pointermove', event => {
+        if (!drag || (drag.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
+        const dx = (event.clientX - drag.startX) / zoomLevel;
+        const dy = (event.clientY - drag.startY) / zoomLevel;
+        if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+        drag.moved = true;
+        suppressClick = true;
+        button.classList.add('dragging');
+        const next = { x: Math.max(8, drag.x + dx), y: Math.max(46, drag.y + dy) };
+        positions.set(node.id, next);
+        button.style.left = next.x + 'px';
+        button.style.top = next.y + 'px';
+        const width = Math.max(1100, next.x + 220, ...[...positions.values()].map(position => position.x + 220));
+        const height = Math.max(760, next.y + 110, ...[...positions.values()].map(position => position.y + 110));
+        stage.style.width = width + 'px';
+        stage.style.height = height + 'px';
+        edgesRoot.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+        renderEdges(current.edges, visibleIds);
+      });
+      const finishDrag = event => {
+        if (!drag || (drag.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
+        if (drag.moved) {
+          manualPositions.set(layoutKey(node.id), positions.get(node.id));
+          persistUiState();
+        }
+        button.classList.remove('dragging');
+        button.releasePointerCapture?.(event.pointerId);
+        drag = null;
+      };
+      button.addEventListener('pointerup', finishDrag);
+      button.addEventListener('pointercancel', finishDrag);
+      button.addEventListener('click', event => {
+        if (suppressClick) {
+          suppressClick = false;
+          event.preventDefault();
+          return;
+        }
+        showNode(node);
+      });
+    }
+
+    function render() {
+      if (!graph) return;
+      nodesRoot.replaceChildren();
+      edgesRoot.replaceChildren();
+      positions = new Map();
+      const current = scopedGraph();
+      const visible = current.nodes;
+      const visibleIds = new Set(visible.map(node => node.id));
+      const columnWidth = 230;
+      const rowHeight = 86;
+      let maxRows = 1;
+
+      layers.forEach((kinds, column) => {
+        const group = visible.filter(node => kinds.includes(node.kind));
+        maxRows = Math.max(maxRows, group.length);
+        const label = text('div', kinds.join(' / '), 'column-label');
+        label.style.left = (34 + column * columnWidth) + 'px';
+        nodesRoot.appendChild(label);
+        group.forEach((node, row) => {
+          const automatic = { x: 34 + column * columnWidth, y: 54 + row * rowHeight };
+          const custom = manualPositions.get(layoutKey(node.id));
+          const x = custom?.x ?? automatic.x;
+          const y = custom?.y ?? automatic.y;
+          positions.set(node.id, { x, y });
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'node' + (selected === node.id ? ' active' : '');
+          button.style.left = x + 'px';
+          button.style.top = y + 'px';
+          button.style.setProperty('--node-color', colors[node.kind] || colors.class);
+          button.dataset.nodeId = node.id;
+          button.append(text('span', node.kind, 'node-kind'), text('span', node.label, 'node-label'));
+          makeDraggable(button, node, current, visibleIds);
+          nodesRoot.appendChild(button);
+        });
+      });
+
+      const width = Math.max(1100, 70 + layers.length * columnWidth, ...[...positions.values()].map(position => position.x + 220));
+      const height = Math.max(760, 100 + maxRows * rowHeight, ...[...positions.values()].map(position => position.y + 110));
+      stage.style.width = width + 'px';
+      stage.style.height = height + 'px';
+      edgesRoot.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+      renderEdges(current.edges, visibleIds);
 
       const labels = {
         overview: 'Architecture overview',
@@ -531,10 +650,11 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       }
       selected = node.id;
       render();
-      detail.replaceChildren();
+      openInspector(node.label);
+      detailContent.replaceChildren();
       const badge = text('span', node.kind, 'badge');
       badge.style.setProperty('--detail-color', colors[node.kind] || colors.class);
-      detail.append(
+      detailContent.append(
         badge,
         text('h2', node.label),
         text('p', node.qualifiedName || '', 'qualified'),
@@ -551,7 +671,8 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       const displayed = scopedGraph().nodes;
       const source = displayed.find(node => node.id === edge.source);
       const target = displayed.find(node => node.id === edge.target);
-      detail.replaceChildren();
+      openInspector((source?.label || '?') + ' → ' + (target?.label || '?'));
+      detailContent.replaceChildren();
       const content = [
         text('span', edge.kind, 'badge'),
         text('h2', (source?.label || '?') + ' → ' + (target?.label || '?')),
@@ -565,7 +686,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
           sourceButton('edge', edge.id)
         );
       }
-      detail.append(...content);
+      detailContent.append(...content);
     }
 
     window.addEventListener('message', event => {
@@ -576,15 +697,27 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       render();
       if (graph.warnings.length) {
         const warning = text('div', graph.warnings.length + ' dynamic or unresolved connection(s) were kept as warnings instead of being guessed.', 'warning');
-        detail.prepend(warning);
+        detailContent.prepend(warning);
       }
     });
     search.addEventListener('input', render);
     document.getElementById('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));
-    document.getElementById('zoom').addEventListener('input', event => {
-      const value = Number(event.target.value) / 100;
-      stage.style.transform = 'scale(' + value + ')';
+    document.getElementById('resetLayout').addEventListener('click', () => {
+      const prefix = (search.value.trim() ? 'search:' + search.value.trim().toLowerCase() : scopeKey(scope)) + '|';
+      manualPositions = new Map([...manualPositions.entries()].filter(([key]) => !key.startsWith(prefix)));
+      persistUiState();
+      render();
     });
+    document.getElementById('minimizeDetail').addEventListener('click', () => setInspectorState('minimized'));
+    document.getElementById('closeDetail').addEventListener('click', () => setInspectorState('closed'));
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && inspectorState !== 'closed') setInspectorState('closed');
+    });
+    document.getElementById('zoom').addEventListener('input', event => {
+      zoomLevel = Number(event.target.value) / 100;
+      stage.style.transform = 'scale(' + zoomLevel + ')';
+    });
+    restoreUiState();
     vscode.postMessage({ type: 'ready' });
   </script>
 </body>

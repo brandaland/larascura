@@ -5,6 +5,7 @@
   "version": "0.2.1",
   "publisher": "ozkan",
   "license": "MIT",
+  "icon": "media/larascura.png",
   "engines": {
     "vscode": "^1.95.0"
   },

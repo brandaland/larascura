@@ -20,9 +20,12 @@ describe('LaraScura architecture webview', () => {
       virtualConsole,
       beforeParse(window) {
         window.addEventListener('error', (event) => errors.push(event.message));
+        let webviewState: unknown = undefined;
         Object.assign(window, {
           acquireVsCodeApi: () => ({
             postMessage: (message: unknown) => messages.push(message),
+            getState: () => webviewState,
+            setState: (state: unknown) => { webviewState = state; },
           }),
         });
       },
@@ -78,6 +81,25 @@ describe('LaraScura architecture webview', () => {
     expect(dom.window.document.querySelector('#tree')?.textContent).toContain('Architecture layers');
     expect(dom.window.document.querySelectorAll('.node')).toHaveLength(2);
     expect(dom.window.document.querySelector('#scopeName')?.textContent).toBe('Architecture overview');
+    expect(dom.window.document.querySelector('#resetLayout')).not.toBeNull();
+    expect(dom.window.document.querySelector('#minimizeDetail')).not.toBeNull();
+    expect(dom.window.document.querySelector('#closeDetail')).not.toBeNull();
+
+    (dom.window.document.querySelector('#minimizeDetail') as { click(): void } | null)?.click();
+    expect(dom.window.document.querySelector('#detail')?.classList.contains('minimized')).toBe(true);
+    expect(dom.window.document.querySelector('#workspace')?.classList.contains('inspector-collapsed')).toBe(true);
+
+    (dom.window.document.querySelector('#closeDetail') as { click(): void } | null)?.click();
+    expect(dom.window.document.querySelector('#detail')?.classList.contains('closed')).toBe(true);
+
+    const controllerSummary = [...dom.window.document.querySelectorAll('.node')]
+      .find((node) => node.textContent?.includes('Controllers')) as { click(): void } | undefined;
+    controllerSummary?.click();
+    const controllerNode = [...dom.window.document.querySelectorAll('.node')]
+      .find((node) => node.textContent?.includes('OrderController')) as { click(): void } | undefined;
+    controllerNode?.click();
+    expect(dom.window.document.querySelector('#detail')?.classList.contains('closed')).toBe(false);
+    expect(dom.window.document.querySelector('#detailTitle')?.textContent).toBe('OrderController');
 
     dom.window.close();
   });
