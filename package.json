@@ -1,0 +1,141 @@
+{
+  "name": "larascura",
+  "displayName": "LaraScura",
+  "description": "Visualize Laravel architecture, follow request flows, and understand the syntax.",
+  "version": "0.1.0",
+  "publisher": "ozkan",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Visualization",
+    "Programming Languages",
+    "Education"
+  ],
+  "keywords": [
+    "laravel",
+    "php",
+    "architecture",
+    "routes",
+    "eloquent",
+    "visualization",
+    "learning"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:artisan",
+    "onCommand:larascura.openMap",
+    "onView:larascura.explorer"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "LaraScura reads PHP source files to build a local architecture map. It never executes project code."
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "larascura.openMap",
+        "title": "LaraScura: Open Architecture Map",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "larascura.refresh",
+        "title": "LaraScura: Refresh Architecture Map",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "larascura.explainSelection",
+        "title": "LaraScura: Explain Selected Laravel Syntax",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "larascura.openNode",
+        "title": "LaraScura: Open Source"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "larascura",
+          "title": "LaraScura",
+          "icon": "media/larascura.svg"
+        }
+      ]
+    },
+    "views": {
+      "larascura": [
+        {
+          "id": "larascura.explorer",
+          "name": "Laravel Architecture"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "larascura.openMap",
+          "when": "view == larascura.explorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "larascura.refresh",
+          "when": "view == larascura.explorer",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "larascura.explainSelection",
+          "when": "editorLangId == php && isWorkspaceTrusted",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "LaraScura",
+      "properties": {
+        "larascura.explanationLanguage": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "en",
+            "tr"
+          ],
+          "default": "auto",
+          "description": "Language used for Laravel syntax explanations."
+        },
+        "larascura.watchFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Refresh the map when PHP files change."
+        },
+        "larascura.includeRepositories": {
+          "type": "boolean",
+          "default": true,
+          "description": "Classify repository classes as their own architecture layer."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check": "npm run typecheck && npm test && npm run security:check",
+    "typecheck": "tsc --noEmit",
+    "compile": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "test": "vitest run",
+    "security:check": "node scripts/security-check.mjs",
+    "vscode:prepublish": "npm run check && node esbuild.mjs --production",
+    "package:vsix": "npx vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
