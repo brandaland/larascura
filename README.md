@@ -12,8 +12,6 @@ LaraScura was created for people who understand systems better through flows and
 
 > **Free forever. No telemetry, no subscriptions, no hidden costs—and no need to buy me a coffee. Just learn, build, and pass it on.**
 
-LaraScura was conceived and implemented with OpenAI Codex after Özkan asked whether Laravel architecture could be made understandable without relying on syntax-first learning.
-
 ## First release
 
 - Detects reusable Laravel projects through `artisan` and `composer.json`
