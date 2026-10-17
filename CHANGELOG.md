@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - Mapped controller method injection: Form Requests appear as their own layer (`validates`), type-hinted models show route model binding (`resolves`), and services injected into actions or `handle()` are linked.
 - Connected listeners to events through `handle(Event $event)` type-hints (Laravel event discovery) and explicit `$listen` / `Event::listen` registrations.
@@ -8,6 +8,7 @@
 - Recognized class-based route middleware such as `->middleware(EnsureAdmin::class)`.
 - Read parameter lists with balanced-bracket scanning so nested defaults, attributes, nullable and union types no longer break dependency detection.
 - Added an end-to-end scanner test against a fixture Laravel project.
+- Linked the Marketplace page to the GitHub repository and issue tracker.
 
 ## 0.2.3
 

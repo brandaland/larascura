@@ -77,7 +77,7 @@ Marketplace identifier: `ooll.larascura`
 
 ~~~bash
 npm run package:vsix
-code --install-extension larascura-0.2.2.vsix
+code --install-extension larascura-0.3.0.vsix
 ~~~
 
 ## Static-analysis boundaries
@@ -101,10 +101,10 @@ A missing connection means the syntax was not statically resolvable — not that
 
 - ✅ Route-group prefix and inherited middleware resolution — completed in `0.2.2`
 - Controller resolution for `Route::controller(...)` groups
-- ✅ Event-to-listener registration mapping — Unreleased
-- ✅ Laravel middleware alias resolution — Unreleased
+- ✅ Event-to-listener registration mapping — completed in `0.3.0`
+- ✅ Laravel middleware alias resolution — completed in `0.3.0`
 - Method-level request journey view
-- ✅ Form Request nodes — Unreleased
+- ✅ Form Request nodes — completed in `0.3.0`
 - Policy, Resource, Notification, Mail, and Observer nodes
 - Laravel-version-aware learning cards
 - Multi-project workspace comparison
