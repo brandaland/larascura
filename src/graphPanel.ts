@@ -210,6 +210,11 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .detail-toolbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; min-height: 38px; padding: 0 8px 0 12px; background: var(--vscode-sideBar-background); border-bottom: 1px solid var(--vscode-panel-border); }
     .detail.minimized .detail-toolbar { border-bottom: 0; }
     .detail-title { min-width: 0; overflow: hidden; font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .detail.minimized .detail-toolbar { cursor: pointer; }
+    .detail-badge { margin-left: 8px; padding: 1px 6px; border-radius: 999px; color: #1f1f1f; background: #f59e0b; font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .detail-badge[hidden], .doctor-button[hidden] { display: none; }
+    .doctor-button { display: inline-flex; align-items: center; gap: 6px; }
+    .doctor-button .doctor-count { padding: 0 6px; border-radius: 999px; color: #1f1f1f; background: #f59e0b; font-size: 11px; font-weight: 700; }
     .detail-actions { display: flex; gap: 2px; margin-left: auto; }
     .detail-action { display: grid; width: 28px; height: 28px; padding: 0; place-items: center; color: var(--vscode-foreground); background: transparent; border: 0; border-radius: 5px; cursor: pointer; }
     .detail-action:hover { background: var(--vscode-toolbar-hoverBackground); }
@@ -304,6 +309,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       <input id="search" class="search" type="search" placeholder="Filter routes, classes, models…" aria-label="Filter architecture nodes">
       <button id="refresh" class="tool-button" type="button">Refresh</button>
       <button id="resetLayout" class="tool-button secondary" type="button" title="Return nodes to the automatic layout">Reset layout</button>
+      <button id="doctorButton" class="tool-button secondary doctor-button" type="button" title="Show LaraScura Doctor findings" hidden>Doctor <span id="doctorCount" class="doctor-count"></span></button>
       <input id="zoom" class="zoom" type="range" min="55" max="135" value="100" aria-label="Graph zoom">
       <span id="stats" class="stats">Waiting for scan…</span>
     </header>
@@ -316,6 +322,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       <aside id="detail" class="detail" aria-live="polite">
         <header class="detail-toolbar">
           <span id="detailTitle" class="detail-title">Inspector</span>
+          <span id="detailBadge" class="detail-badge" hidden></span>
           <span class="detail-actions">
             <button id="minimizeDetail" class="detail-action" type="button" title="Minimize Inspector" aria-label="Minimize Inspector">−</button>
             <button id="closeDetail" class="detail-action" type="button" title="Close Inspector" aria-label="Close Inspector">×</button>
@@ -422,6 +429,12 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       detail.classList.toggle('closed', nextState === 'closed');
       detail.classList.toggle('minimized', nextState === 'minimized');
       workspace.classList.toggle('inspector-collapsed', nextState !== 'open');
+      // While minimized the same button restores the panel.
+      const minimizeButton = document.getElementById('minimizeDetail');
+      const restoring = nextState === 'minimized';
+      minimizeButton.textContent = restoring ? '▢' : '−';
+      minimizeButton.title = restoring ? 'Restore Inspector' : 'Minimize Inspector';
+      minimizeButton.setAttribute('aria-label', minimizeButton.title);
       if (persist) persistUiState();
     }
 
@@ -1174,6 +1187,13 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       render();
       const summary = doctorSummary();
       if (summary) detailContent.prepend(summary);
+      const mistakes = (graph.findings || []).filter(finding => finding.severity === 'warning').length;
+      const doctorButton = document.getElementById('doctorButton');
+      doctorButton.hidden = !(graph.findings || []).length;
+      document.getElementById('doctorCount').textContent = mistakes ? '⚠ ' + mistakes : String((graph.findings || []).length);
+      const badge = document.getElementById('detailBadge');
+      badge.hidden = !mistakes;
+      badge.textContent = '⚠ ' + mistakes;
     });
     search.addEventListener('input', render);
     document.getElementById('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));
@@ -1254,7 +1274,14 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     });
     viewport.addEventListener('scroll', hideContextMenu);
     window.addEventListener('blur', hideContextMenu);
-    document.getElementById('minimizeDetail').addEventListener('click', () => setInspectorState('minimized'));
+    document.getElementById('minimizeDetail').addEventListener('click', event => {
+      event.stopPropagation();
+      setInspectorState(inspectorState === 'minimized' ? 'open' : 'minimized');
+    });
+    document.querySelector('.detail-toolbar').addEventListener('click', event => {
+      if (inspectorState === 'minimized' && !event.target.closest('.detail-action')) setInspectorState('open');
+    });
+    document.getElementById('doctorButton').addEventListener('click', () => showDoctor());
     document.getElementById('closeDetail').addEventListener('click', () => setInspectorState('closed'));
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && !contextMenu.hidden) {

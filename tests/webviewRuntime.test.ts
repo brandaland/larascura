@@ -488,4 +488,51 @@ describe('LaraScura architecture webview', () => {
       dom.window.close();
     });
   });
+
+  it('restores a minimized inspector and keeps Doctor reachable when the inspector is closed', () => {
+    const dom = new JSDOM(createGraphHtml('test-nonce'), {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      virtualConsole: new VirtualConsole(),
+      beforeParse(window) {
+        Object.assign(window, {
+          acquireVsCodeApi: () => ({ postMessage: () => undefined, getState: () => undefined, setState: () => undefined }),
+        });
+      },
+    });
+    const document = dom.window.document;
+    const click = (selector: string) => (document.querySelector(selector) as unknown as { click(): void }).click();
+    const graph: ArchitectureGraph = {
+      projectName: 'example/app', root: '/workspace/example', sourceDirectories: ['app', 'routes'],
+      generatedAt: new Date(0).toISOString(), warnings: [], nodes: [], edges: [],
+      findings: [
+        { file: '/workspace/example/routes/web.php', line: 3, severity: 'warning', code: 'missing-action', message: 'OrderController has no method "indx()".' },
+        { file: '/workspace/example/app/Api/X.php', line: 3, severity: 'information', code: 'namespace-case', message: 'Namespace tip.' },
+      ],
+    };
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph } }));
+    const detail = document.querySelector('#detail')!;
+
+    expect((document.querySelector('#doctorButton') as HTMLElement).hidden).toBe(false);
+    expect(document.querySelector('#doctorCount')?.textContent).toBe('⚠ 1');
+
+    click('#minimizeDetail');
+    expect(detail.classList.contains('minimized')).toBe(true);
+    expect(document.querySelector('#minimizeDetail')?.getAttribute('title')).toBe('Restore Inspector');
+    expect((document.querySelector('#detailBadge') as HTMLElement).hidden).toBe(false);
+    click('#minimizeDetail');
+    expect(detail.classList.contains('minimized')).toBe(false);
+
+    click('#minimizeDetail');
+    click('.detail-toolbar');
+    expect(detail.classList.contains('minimized')).toBe(false);
+
+    click('#closeDetail');
+    expect(detail.classList.contains('closed')).toBe(true);
+    click('#doctorButton');
+    expect(detail.classList.contains('closed')).toBe(false);
+    expect(document.querySelector('#detailTitle')?.textContent).toBe('LaraScura Doctor');
+    expect(document.querySelectorAll('.finding')).toHaveLength(2);
+    dom.window.close();
+  });
 });

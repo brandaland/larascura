@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2
+
+- Fixed a minimized Inspector that could not be restored: the minimize button now toggles to restore, and clicking the minimized title bar opens it again. The minimized bar shows the Doctor count.
+- Added a **Doctor** button to the map toolbar whenever there are findings, so they stay reachable even with the Inspector closed.
+
 ## 0.5.1
 
 - Linked routes declared inside `Route::controller(X::class)->group(...)` to their controller, so `Route::get('/', 'index')` maps to `X@index`. Nested controller groups use the innermost controller. On a 900-route production app this connected 323 more routes.
