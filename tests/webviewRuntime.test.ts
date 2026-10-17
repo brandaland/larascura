@@ -369,6 +369,27 @@ describe('LaraScura architecture webview', () => {
       'SendGoodbyeMail',
       'auth',
     ]);
+
+    const document = dom.window.document;
+    expect([...document.querySelectorAll('.layer-button .nav-label')].map((label) => label.textContent)).toEqual([
+      'Routes', 'Middleware', 'Form Requests', 'Controllers', 'Services', 'Events', 'Listeners',
+    ]);
+    expect(document.querySelectorAll('.spectrum-segment')).toHaveLength(7);
+    expect(document.querySelector('.specimen-stats')?.textContent).toBe('9 nodes9 links2 routes');
+    expect([...document.querySelectorAll('.route-item .method')].map((badge) => badge.textContent).sort()).toEqual(['GET', 'POST']);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'focus', nodeId: 'ctrl' } }));
+    expect(document.querySelector('.degree')?.textContent).toBe('in 2out 3');
+    const connections = [...document.querySelectorAll('.connection')];
+    expect(connections.map((row) => row.textContent)).toEqual([
+      '→validatesDeleteAccountRequest',
+      '→validatesCartRequest',
+      '→injectsAccountService',
+      '←handlesPOST /account/delete',
+      '←handlesGET /cart',
+    ]);
+    (connections[2] as unknown as { click(): void }).click();
+    expect(document.querySelector('#detailTitle')?.textContent).toBe('AccountService');
     expect(errors).toEqual([]);
     dom.window.close();
   });

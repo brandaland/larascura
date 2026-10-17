@@ -3,6 +3,8 @@
 ## 0.4.0
 
 - Added CodeLens: routes show the controller action that handles them, controller actions show every route and middleware that reaches them, and each class shows its connection count.
+- Redesigned the navigator: a project specimen card with a clickable composition spectrum, architecture layers ordered along the request lifecycle with proportional bars, and colored HTTP method badges on every route.
+- Redesigned the Inspector: an incoming/outgoing connection meter and a clickable list of direct connections that moves the map to the connected node.
 - Added **LaraScura: Reveal in Architecture Map** (editor context menu and Command Palette) to focus the map on the route under the cursor or the class in the current file.
 - Scanned every PSR-4 autoload directory from `composer.json` and the `Modules/` folder, so domain folders and modular projects are mapped; factories, seeders, and tests stay out of the map.
 - Recognized route files inside modules, such as `Modules/Blog/routes/web.php`.

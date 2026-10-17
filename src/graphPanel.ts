@@ -218,6 +218,48 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .code { margin-top: 9px; padding: 9px; overflow: auto; color: var(--vscode-textPreformat-foreground); background: var(--vscode-textCodeBlock-background); border-radius: 6px; font-family: var(--vscode-editor-font-family); font-size: 11px; white-space: pre-wrap; }
     .source-button { width: 100%; margin-top: 14px; }
     .warning { padding: 8px 10px; color: var(--vscode-editorWarning-foreground); background: var(--vscode-inputValidation-warningBackground); border: 1px solid var(--vscode-inputValidation-warningBorder); border-radius: 6px; font-size: 11px; }
+    .specimen { margin: 0 4px 14px; padding: 12px 12px 10px; border: 1px solid var(--vscode-panel-border); border-radius: 10px; background: color-mix(in srgb, var(--vscode-editor-background) 65%, transparent); }
+    .specimen-eyebrow { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 9px; letter-spacing: .18em; text-transform: uppercase; }
+    .specimen-name { display: block; width: 100%; margin: 5px 0 3px; padding: 0; overflow: hidden; color: var(--vscode-foreground); background: none; border: 0; font-size: 13px; font-weight: 700; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+    .specimen-name:hover, .specimen-name.active { color: var(--vscode-textLink-foreground); }
+    .specimen-stats { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; font-variant-numeric: tabular-nums; }
+    .specimen-stats strong { color: var(--vscode-foreground); font-weight: 650; }
+    .spectrum { display: flex; gap: 1px; height: 9px; margin-top: 11px; overflow: hidden; border-radius: 5px; background: var(--vscode-panel-border); }
+    .spectrum-segment { min-width: 3px; padding: 0; background: var(--segment-color); border: 0; opacity: .82; cursor: pointer; transition: opacity .15s ease; }
+    .spectrum-segment:hover, .spectrum-segment:focus-visible { opacity: 1; outline: none; }
+    .spectrum-caption { display: flex; justify-content: space-between; margin-top: 5px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 9px; letter-spacing: .04em; }
+    .nav-caption { margin: -2px 8px 6px 24px; color: var(--vscode-descriptionForeground); font-size: 10px; }
+    .lifecycle { position: relative; margin: 2px 0 4px; }
+    .lifecycle::before { content: ''; position: absolute; top: 15px; bottom: 15px; left: 19px; width: 2px; border-radius: 1px; background: linear-gradient(#22c55e, #3b82f6 30%, #ef4444 60%, #94a3b8); opacity: .35; }
+    .layer-button { position: relative; display: grid; width: 100%; min-height: 29px; grid-template-columns: 22px minmax(0, 1fr) 42px 30px; align-items: center; gap: 6px; padding: 3px 8px 3px 8px; color: var(--vscode-foreground); background: transparent; border: 0; border-radius: 6px; font-size: 12px; text-align: left; cursor: pointer; }
+    .layer-button:hover { background: var(--vscode-list-hoverBackground); }
+    .layer-button.active { color: var(--vscode-list-activeSelectionForeground); background: var(--vscode-list-activeSelectionBackground); }
+    .layer-dot { z-index: 1; width: 9px; height: 9px; margin-left: 7px; border-radius: 50%; background: var(--layer-color); box-shadow: 0 0 0 3px var(--vscode-sideBar-background), 0 0 0 5px color-mix(in srgb, var(--layer-color) 28%, transparent); }
+    .layer-bar { height: 4px; overflow: hidden; border-radius: 2px; background: color-mix(in srgb, var(--layer-color) 18%, transparent); }
+    .layer-bar > span { display: block; height: 100%; border-radius: 2px; background: var(--layer-color); }
+    .layer-count { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; font-variant-numeric: tabular-nums; text-align: right; }
+    .layer-button.active .layer-count { color: inherit; }
+    .method { display: inline-block; min-width: 40px; margin-right: 7px; padding: 1px 4px; border-radius: 3px; color: var(--method-color); background: color-mix(in srgb, var(--method-color) 15%, transparent); font-size: 9px; font-weight: 700; letter-spacing: .03em; text-align: center; }
+    .degree { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin: 2px 0 16px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; font-variant-numeric: tabular-nums; }
+    .degree-side { display: grid; gap: 4px; }
+    .degree-side.out { text-align: right; }
+    .degree-bar { display: flex; height: 4px; overflow: hidden; border-radius: 2px; background: color-mix(in srgb, var(--detail-color, #7c3aed) 16%, transparent); }
+    .degree-side.in .degree-bar { justify-content: flex-end; }
+    .degree-bar > span { display: block; height: 100%; background: var(--detail-color, #7c3aed); }
+    .degree-core { width: 12px; height: 12px; border-radius: 50%; background: var(--detail-color, #7c3aed); box-shadow: 0 0 0 4px color-mix(in srgb, var(--detail-color, #7c3aed) 22%, transparent); }
+    .connection-list { display: grid; gap: 1px; }
+    .connection { display: grid; width: 100%; grid-template-columns: 12px 72px minmax(0, 1fr); align-items: center; gap: 6px; padding: 5px 6px; color: var(--vscode-foreground); background: transparent; border: 0; border-radius: 5px; font-size: 11px; text-align: left; cursor: pointer; }
+    .connection:hover { background: var(--vscode-list-hoverBackground); }
+    .connection-dir { color: var(--vscode-descriptionForeground); }
+    .connection-kind { overflow: hidden; color: var(--kind-color); font-family: var(--vscode-editor-font-family); font-size: 9px; letter-spacing: .05em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+    .connection-target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .connection-more { padding: 6px; color: var(--vscode-descriptionForeground); font-size: 10px; }
+    .emblem { display: block; width: 132px; height: 70px; margin: 0 0 14px; }
+    .emblem-link { fill: none; stroke: var(--vscode-descriptionForeground); stroke-width: 1.4; opacity: .45; }
+    .emblem-node { stroke: var(--vscode-sideBar-background); stroke-width: 2; }
+    .emblem-route { fill: #22c55e; } .emblem-middleware { fill: #f59e0b; } .emblem-controller { fill: #3b82f6; }
+    .emblem-service { fill: #8b5cf6; } .emblem-model { fill: #ef4444; } .emblem-event { fill: #eab308; }
+    .emblem-caption { margin-top: 12px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; letter-spacing: .04em; }
     .hidden { display: none !important; }
     @media (max-width: 1050px) {
       .workspace { grid-template-columns: 220px 1fr; }
@@ -256,7 +298,20 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
           </span>
         </header>
         <div id="detailContent" class="detail-content">
-          <div class="detail-empty"><strong>Explore how Laravel works.</strong><br>Select a node or connection to see why it exists, which syntax created it, and where it lives in your project.</div>
+          <div class="detail-empty">
+            <svg class="emblem" viewBox="0 0 132 70" role="img" aria-label="A request travelling from route to model">
+              <path class="emblem-link" d="M12 35 C 26 35, 30 35, 40 35 M40 35 C 52 35, 56 35, 68 35 M68 35 C 80 35, 84 16, 96 16 M68 35 C 80 35, 84 54, 96 54 M96 16 C 108 16, 112 16, 120 16 M96 54 C 108 54, 112 54, 120 54"/>
+              <circle class="emblem-node emblem-route" cx="12" cy="35" r="6"/>
+              <circle class="emblem-node emblem-middleware" cx="40" cy="35" r="5"/>
+              <circle class="emblem-node emblem-controller" cx="68" cy="35" r="7"/>
+              <circle class="emblem-node emblem-service" cx="96" cy="16" r="5"/>
+              <circle class="emblem-node emblem-model" cx="96" cy="54" r="5"/>
+              <circle class="emblem-node emblem-event" cx="120" cy="16" r="4"/>
+              <circle class="emblem-node emblem-model" cx="120" cy="54" r="4"/>
+            </svg>
+            <strong>Explore how Laravel works.</strong><br>Select a node or connection to see why it exists, which syntax created it, and where it lives in your project.
+            <div class="emblem-caption">route → middleware → controller → service → model</div>
+          </div>
         </div>
       </aside>
     </div>
@@ -508,29 +563,127 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       };
     }
 
+    // The order a request travels through a Laravel app; the navigator and spectrum follow it.
+    const lifecycleOrder = ['route', 'middleware', 'request', 'controller', 'service', 'repository', 'provider', 'model', 'event', 'listener', 'job', 'command', 'class'];
+    const methodColors = { GET: '#22c55e', HEAD: '#22c55e', POST: '#3b82f6', PUT: '#f59e0b', PATCH: '#f59e0b', DELETE: '#ef4444', OPTIONS: '#94a3b8', ANY: '#94a3b8' };
+
+    function methodBadge(method) {
+      const first = method.split('|')[0];
+      const badge = text('span', method.includes('|') ? first + '+' : first, 'method');
+      badge.style.setProperty('--method-color', methodColors[first] || '#94a3b8');
+      badge.title = method;
+      return badge;
+    }
+
+    function activateScope(nextScope) {
+      scope = nextScope;
+      selected = null;
+      search.value = '';
+      renderTree();
+      render();
+    }
+
+    function isActiveScope(nextScope) {
+      const focusedNode = scope.type === 'node' ? graph.nodes.find(node => node.id === scope.value) : null;
+      return scopeKey(scope) === scopeKey(nextScope) || (nextScope.type === 'kind' && focusedNode?.kind === nextScope.value);
+    }
+
     function navButton(label, count, nextScope, className) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'nav-button ' + (className || '');
-      const focusedNode = scope.type === 'node' ? graph.nodes.find(node => node.id === scope.value) : null;
-      const isFocusedLayer = nextScope.type === 'kind' && focusedNode?.kind === nextScope.value;
-      if (scopeKey(scope) === scopeKey(nextScope) || isFocusedLayer) button.classList.add('active');
+      if (isActiveScope(nextScope)) button.classList.add('active');
       button.title = label;
-      button.append(text('span', label, 'nav-label'));
+      if (className === 'route-item') {
+        const parts = label.split(' ');
+        const name = text('span', '', 'nav-label');
+        name.append(methodBadge(parts[0]), document.createTextNode(parts.slice(1).join(' ')));
+        button.append(name);
+      } else {
+        button.append(text('span', label, 'nav-label'));
+      }
       if (count !== undefined) button.append(text('span', String(count), 'nav-count'));
-      button.addEventListener('click', () => {
-        scope = nextScope;
-        selected = null;
-        search.value = '';
-        renderTree();
-        render();
-      });
+      button.addEventListener('click', () => activateScope(nextScope));
       return button;
     }
 
+    function orderedKinds(kindCounts) {
+      return [...lifecycleOrder, ...[...kindCounts.keys()].filter(kind => !lifecycleOrder.includes(kind))]
+        .filter(kind => kindCounts.get(kind));
+    }
+
+    function renderSpecimen(kindCounts) {
+      const card = document.createElement('section');
+      card.className = 'specimen';
+      const overview = { type: 'overview' };
+      const name = text('button', graph.projectName, 'specimen-name' + (isActiveScope(overview) ? ' active' : ''));
+      name.type = 'button';
+      name.title = 'Open the architecture overview';
+      name.addEventListener('click', () => activateScope(overview));
+
+      const stats = document.createElement('div');
+      stats.className = 'specimen-stats';
+      [[graph.nodes.length, 'nodes'], [graph.edges.length, 'links'], [kindCounts.get('route') || 0, 'routes']].forEach(([value, unit]) => {
+        const stat = document.createElement('span');
+        stat.append(text('strong', String(value)), document.createTextNode(' ' + unit));
+        stats.append(stat);
+      });
+
+      const spectrum = document.createElement('div');
+      spectrum.className = 'spectrum';
+      spectrum.setAttribute('role', 'group');
+      spectrum.setAttribute('aria-label', 'Project composition by architecture layer');
+      orderedKinds(kindCounts).forEach(kind => {
+        const count = kindCounts.get(kind);
+        const segment = document.createElement('button');
+        segment.type = 'button';
+        segment.className = 'spectrum-segment';
+        segment.style.flexGrow = String(count);
+        segment.style.setProperty('--segment-color', colors[kind] || colors.class);
+        segment.title = (kindLabels[kind] || kind) + ' · ' + count + ' (' + Math.max(1, Math.round(count / graph.nodes.length * 100)) + '%)';
+        segment.setAttribute('aria-label', segment.title);
+        segment.addEventListener('click', () => activateScope({ type: 'kind', value: kind }));
+        spectrum.append(segment);
+      });
+
+      const caption = document.createElement('div');
+      caption.className = 'spectrum-caption';
+      caption.append(text('span', 'entry'), text('span', 'composition'), text('span', 'async'));
+      card.append(text('div', 'LaraScura · specimen', 'specimen-eyebrow'), name, stats, spectrum, caption);
+      return card;
+    }
+
     function renderTree() {
-      treeRoot.replaceChildren(text('div', 'Project map', 'nav-heading'));
-      treeRoot.append(navButton('Overview', graph.nodes.length, { type: 'overview' }, 'root'));
+      const kindCounts = new Map();
+      for (const node of graph.nodes) kindCounts.set(node.kind, (kindCounts.get(node.kind) || 0) + 1);
+      treeRoot.replaceChildren(renderSpecimen(kindCounts));
+
+      const architecture = document.createElement('details');
+      architecture.className = 'nav-section';
+      architecture.open = scope.type !== 'module' && scope.type !== 'route' && scope.type !== 'all';
+      architecture.append(text('summary', 'Architecture layers'), text('div', 'In the order a request travels', 'nav-caption'));
+      const axis = document.createElement('div');
+      axis.className = 'lifecycle';
+      const largest = Math.max(1, ...kindCounts.values());
+      orderedKinds(kindCounts).forEach(kind => {
+        const count = kindCounts.get(kind);
+        const nextScope = { type: 'kind', value: kind };
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'layer-button' + (isActiveScope(nextScope) ? ' active' : '');
+        button.title = (kindLabels[kind] || kind) + ' · ' + count;
+        button.style.setProperty('--layer-color', colors[kind] || colors.class);
+        const bar = text('span', '', 'layer-bar');
+        const fill = document.createElement('span');
+        // Log scale keeps 5 events visible next to 900 routes.
+        fill.style.width = Math.max(6, Math.round(Math.log(count + 1) / Math.log(largest + 1) * 100)) + '%';
+        bar.append(fill);
+        button.append(text('span', '', 'layer-dot'), text('span', kindLabels[kind] || kind, 'nav-label'), bar, text('span', String(count), 'layer-count'));
+        button.addEventListener('click', () => activateScope(nextScope));
+        axis.append(button);
+      });
+      architecture.append(axis);
+      treeRoot.append(architecture);
 
       const moduleRoutes = new Map();
       for (const route of graph.nodes.filter(node => node.kind === 'route')) {
@@ -542,7 +695,10 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       const modules = document.createElement('details');
       modules.className = 'nav-section';
       modules.open = scope.type === 'module' || scope.type === 'route';
-      modules.append(text('summary', 'Request flows'));
+      modules.append(
+        text('summary', 'Request flows'),
+        text('div', moduleRoutes.size + ' modules · ' + (kindCounts.get('route') || 0) + ' routes', 'nav-caption')
+      );
       [...moduleRoutes.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([module, routes]) => {
         const branch = document.createElement('details');
         branch.className = 'nav-module';
@@ -557,19 +713,6 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         modules.append(branch);
       });
       treeRoot.append(modules);
-
-      const architecture = document.createElement('details');
-      architecture.className = 'nav-section';
-      architecture.open = scope.type === 'kind' || scope.type === 'node';
-      architecture.append(text('summary', 'Architecture layers'));
-      const kindCounts = new Map();
-      for (const node of graph.nodes) kindCounts.set(node.kind, (kindCounts.get(node.kind) || 0) + 1);
-      [...kindCounts.entries()].sort(([left], [right]) =>
-        (kindLabels[left] || left).localeCompare(kindLabels[right] || right)
-      ).forEach(([kind, count]) => {
-        architecture.append(navButton(kindLabels[kind] || kind, count, { type: 'kind', value: kind }));
-      });
-      treeRoot.append(architecture);
 
       const advanced = document.createElement('details');
       advanced.className = 'nav-section';
@@ -773,15 +916,68 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       detailContent.replaceChildren();
       const badge = text('span', node.kind, 'badge');
       badge.style.setProperty('--detail-color', colors[node.kind] || colors.class);
+      detailContent.style.setProperty('--detail-color', colors[node.kind] || colors.class);
+      const incoming = graph.edges.filter(edge => edge.target === node.id);
+      const outgoing = graph.edges.filter(edge => edge.source === node.id);
       detailContent.append(
         badge,
         text('h2', node.label),
         text('p', node.qualifiedName || '', 'qualified'),
-        section('What is this?', node.summary),
+        degreeMeter(incoming.length, outgoing.length),
+        section('What is this?', node.summary)
+      );
+      if (incoming.length || outgoing.length) detailContent.append(connectionSection(incoming, outgoing));
+      detailContent.append(
         section('Laravel syntax', node.syntax, node.location.preview),
         section('Source', node.location.file + ':' + node.location.line),
         sourceButton('node', node.id)
       );
+    }
+
+    function degreeMeter(incomingCount, outgoingCount) {
+      const largest = Math.max(1, incomingCount, outgoingCount);
+      const side = (count, direction) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'degree-side ' + direction;
+        const bar = text('span', '', 'degree-bar');
+        const fill = document.createElement('span');
+        fill.style.width = Math.round(count / largest * 100) + '%';
+        bar.append(fill);
+        wrapper.append(text('span', direction + ' ' + count), bar);
+        return wrapper;
+      };
+      const meter = document.createElement('div');
+      meter.className = 'degree';
+      meter.title = incomingCount + ' incoming and ' + outgoingCount + ' outgoing connections';
+      meter.append(side(incomingCount, 'in'), text('span', '', 'degree-core'), side(outgoingCount, 'out'));
+      return meter;
+    }
+
+    function connectionSection(incoming, outgoing) {
+      const limit = 14;
+      const nodesById = new Map(graph.nodes.map(candidate => [candidate.id, candidate]));
+      const rows = [
+        ...outgoing.map(edge => ({ edge, other: nodesById.get(edge.target), arrow: '→' })),
+        ...incoming.map(edge => ({ edge, other: nodesById.get(edge.source), arrow: '←' }))
+      ].filter(row => row.other);
+      const list = document.createElement('div');
+      list.className = 'connection-list';
+      rows.slice(0, limit).forEach(({ edge, other, arrow }) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'connection';
+        button.title = edge.explanation;
+        const kind = text('span', edge.kind, 'connection-kind');
+        kind.style.setProperty('--kind-color', colors[other.kind] || colors.class);
+        button.append(text('span', arrow, 'connection-dir'), kind, text('span', other.label, 'connection-target'));
+        button.addEventListener('click', () => focusNode(other.id));
+        list.append(button);
+      });
+      if (rows.length > limit) list.append(text('div', '+' + (rows.length - limit) + ' more in the map', 'connection-more'));
+      const wrapper = document.createElement('section');
+      wrapper.className = 'section';
+      wrapper.append(text('h3', 'Connections'), list);
+      return wrapper;
     }
 
     function showEdge(edge) {
@@ -792,6 +988,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       const target = displayed.find(node => node.id === edge.target);
       openInspector((source?.label || '?') + ' → ' + (target?.label || '?'));
       detailContent.replaceChildren();
+      detailContent.style.removeProperty('--detail-color');
       const content = [
         text('span', edge.kind, 'badge'),
         text('h2', (source?.label || '?') + ' → ' + (target?.label || '?')),
