@@ -184,6 +184,7 @@ describe('Laravel PHP syntax parser', () => {
         action: 'index',
         middleware: ['auth', 'verified'],
         line: 5,
+        fromResource: true,
       },
       {
         method: 'GET',
@@ -192,6 +193,7 @@ describe('Laravel PHP syntax parser', () => {
         action: 'show',
         middleware: ['auth', 'verified'],
         line: 5,
+        fromResource: true,
       },
     ]);
   });

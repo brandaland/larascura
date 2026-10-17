@@ -1,4 +1,4 @@
-import type { NodeKind, ParsedClass, ParsedMiddlewareAlias, ParsedRoute } from './types.js';
+import type { NodeKind, ParsedClass, ParsedMiddlewareAlias, ParsedRoute, ViewReference } from './types.js';
 
 const lineNumber = (source: string, index: number): number =>
   source.slice(0, Math.max(0, index)).split('\n').length;
@@ -144,6 +144,7 @@ const topLevelParts = (value: string): Array<{ text: string; offset: number }> =
 
 interface ParsedMethod {
   name: string;
+  index: number;
   visibility: 'public' | 'protected' | 'private';
   isStatic: boolean;
   hasBody: boolean;
@@ -178,6 +179,7 @@ const methodsFrom = (source: string): ParsedMethod[] => {
     }
     methods.push({
       name: match[2],
+      index: match.index,
       visibility: /private/.test(modifiers) ? 'private' : /protected/.test(modifiers) ? 'protected' : 'public',
       isStatic: /static/.test(modifiers),
       hasBody: terminator?.[1] === '{',
@@ -254,6 +256,39 @@ export const parseMiddlewareAliases = (source: string): ParsedMiddlewareAlias[] 
   return aliases;
 };
 
+// Traits are `use` statements inside the class body; imports above the class are not.
+const traitsFrom = (source: string, bodyStart: number, imports: Map<string, string>, namespace: string): string[] => {
+  const body = source.slice(bodyStart);
+  const traits: string[] = [];
+  for (const statement of body.matchAll(/^\s*use\s+([\\\w\s,]+?)\s*[;{]/gm)) {
+    for (const name of (statement[1] ?? '').split(',')) {
+      if (name.trim()) traits.push(resolveName(name.trim(), imports, namespace));
+    }
+  }
+  return traits;
+};
+
+/** Literal view names passed to view(), View::make(), Route::view(), ->view() and ->markdown(). */
+export const viewReferences = (source: string): ViewReference[] => {
+  const references: ViewReference[] = [];
+  const patterns = [
+    // The trailing (?!\s*\.) skips names built by concatenation, such as view('emails.' . $type).
+    /\bview\s*\(\s*(['"])([^'"$]+)\1(?!\s*\.)/g,
+    /View::make\s*\(\s*(['"])([^'"$]+)\1(?!\s*\.)/g,
+    /Route::view\s*\(\s*['"][^'"]*['"]\s*,\s*(['"])([^'"$]+)\1(?!\s*\.)/g,
+    /->(?:view|markdown)\s*\(\s*(['"])([^'"$]+)\1(?!\s*\.)/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const name = match[2]?.trim();
+      // Package views (pkg::name) live outside resources/views.
+      if (!name || name.includes('::') || name.endsWith('.') || match.index === undefined) continue;
+      references.push({ name: name.replaceAll('/', '.'), line: lineNumber(source, match.index) });
+    }
+  }
+  return references.sort((left, right) => left.line - right.line);
+};
+
 export const parsePhpClass = (file: string, source: string): ParsedClass | undefined => {
   const namespace = namespaceFrom(source);
   const imports = importsFrom(source);
@@ -271,7 +306,8 @@ export const parsePhpClass = (file: string, source: string): ParsedClass | undef
 
   const kind = classify(file, name, `${extendsName} ${implementsNames}`);
   const methodDependencies: ParsedClass['methodDependencies'] = [];
-  for (const method of methodsFrom(source)) {
+  const methods = methodsFrom(source);
+  for (const method of methods) {
     const isConstructor = method.name === '__construct' && method.hasBody;
     if (!isConstructor && !containerResolvedMethod(method, kind)) continue;
     for (const parameter of method.parameters) {
@@ -357,6 +393,17 @@ export const parsePhpClass = (file: string, source: string): ParsedClass | undef
     dependencies,
     methodDependencies,
     listeners: listenersFrom(source, imports, namespace),
+    methods: methods
+      .filter((method) => method.visibility === 'public' && method.hasBody)
+      .map((method) => ({ name: method.name, line: lineNumber(source, method.index) })),
+    parent: extendsName ? resolveName(extendsName, imports, namespace) : undefined,
+    traits: traitsFrom(source, classMatch.index + classMatch[0].length, imports, namespace),
+    namespaceLine: (() => {
+      const declaration = /^namespace\s+[^;]+;/m.exec(source);
+      return declaration ? lineNumber(source, declaration.index) : undefined;
+    })(),
+    hasMagicCall: methods.some((method) => method.name.toLowerCase() === '__call'),
+    viewReferences: viewReferences(source),
     relations,
     dispatches,
     bindings,
@@ -588,6 +635,7 @@ export const parseRoutes = (source: string): ParsedRoute[] => {
         action,
         middleware: context.middleware,
         line: lineNumber(source, match.index),
+        fromResource: true,
       });
     }
   }

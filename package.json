@@ -2,7 +2,7 @@
   "name": "larascura",
   "displayName": "LaraScura",
   "description": "Visualize Laravel architecture, follow request flows, and understand the syntax.",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "publisher": "ooll",
   "author": {
     "name": "Ozkan A."
@@ -44,7 +44,10 @@
     "dependency graph",
     "request flow",
     "request lifecycle",
-    "laravel learning"
+    "laravel learning",
+    "diagnostics",
+    "linter",
+    "typo"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
@@ -173,6 +176,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show routes, middleware, and connection counts above Laravel routes, controller actions, and classes."
+        },
+        "larascura.doctor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run LaraScura Doctor: report missing controller methods and views, misspelled middleware, missing models, and duplicate routes in the Problems panel, with quick fixes."
         }
       }
     }

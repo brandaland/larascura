@@ -6,7 +6,7 @@ import { explainSyntax } from './phpParser.js';
 import { ArchitectureTreeProvider } from './treeProvider.js';
 import { phpGlob } from './projectLayout.js';
 import { chooseLaravelRoot, findLaravelRoots, LaravelScanner, scanDirectories } from './scanner.js';
-import type { ArchitectureGraph, ArchitectureNode } from './types.js';
+import type { ArchitectureGraph, ArchitectureNode, Finding } from './types.js';
 
 let graph: ArchitectureGraph | undefined;
 let root: vscode.Uri | undefined;
@@ -46,6 +46,74 @@ const openMethod = (file: string, method: string): Promise<void> =>
     }
     return 1;
   });
+
+const diagnostics = vscode.languages.createDiagnosticCollection('larascura');
+// file|line|token → replacement, looked up again when the editor asks for quick fixes.
+const quickFixes = new Map<string, string>();
+const fixKey = (file: string, line: number, token: string): string => `${file}|${line}|${token}`;
+
+/** Underlines the token when it appears on the line (as a whole word), otherwise the line's code. */
+const findingRange = (lineText: string, line: number, token?: string): vscode.Range => {
+  if (token) {
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = lineText.match(new RegExp(`(^|[^\\w.])(${escaped})(?![\\w])`));
+    if (match?.index !== undefined) {
+      const start = match.index + (match[1]?.length ?? 0);
+      return new vscode.Range(line, start, line, start + token.length);
+    }
+  }
+  const start = lineText.length - lineText.trimStart().length;
+  return new vscode.Range(line, start, line, Math.max(start + 1, lineText.trimEnd().length));
+};
+
+const publishFindings = async (findings: Finding[]): Promise<void> => {
+  const byFile = new Map<string, Finding[]>();
+  for (const finding of findings) byFile.set(finding.file, [...(byFile.get(finding.file) ?? []), finding]);
+  const entries: Array<[vscode.Uri, vscode.Diagnostic[]]> = [];
+  quickFixes.clear();
+  for (const [file, fileFindings] of byFile) {
+    let lines: string[];
+    try {
+      lines = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(vscode.Uri.file(file))).split(/\r?\n/);
+    } catch {
+      continue;
+    }
+    entries.push([vscode.Uri.file(file), fileFindings.map((finding) => {
+      const line = Math.max(0, Math.min(finding.line - 1, lines.length - 1));
+      const diagnostic = new vscode.Diagnostic(
+        findingRange(lines[line] ?? '', line, finding.token),
+        finding.message,
+        finding.severity === 'warning' ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Information,
+      );
+      diagnostic.source = 'LaraScura';
+      diagnostic.code = finding.code;
+      if (finding.token && finding.replacement) quickFixes.set(fixKey(file, line + 1, finding.token), finding.replacement);
+      return diagnostic;
+    })]);
+  }
+  diagnostics.clear();
+  diagnostics.set(entries);
+};
+
+class LaraScuraQuickFixProvider implements vscode.CodeActionProvider {
+  public static readonly kinds = [vscode.CodeActionKind.QuickFix];
+
+  public provideCodeActions(document: vscode.TextDocument, _range: vscode.Range, context: vscode.CodeActionContext): vscode.CodeAction[] {
+    return context.diagnostics
+      .filter((diagnostic) => diagnostic.source === 'LaraScura')
+      .flatMap((diagnostic) => {
+        const token = document.getText(diagnostic.range);
+        const replacement = quickFixes.get(fixKey(document.uri.fsPath, diagnostic.range.start.line + 1, token));
+        if (!replacement) return [];
+        const action = new vscode.CodeAction(`Change "${token}" to "${replacement}"`, vscode.CodeActionKind.QuickFix);
+        action.edit = new vscode.WorkspaceEdit();
+        action.edit.replace(document.uri, diagnostic.range, replacement);
+        action.diagnostics = [diagnostic];
+        action.isPreferred = true;
+        return [action];
+      });
+  }
+}
 
 class LaraScuraCodeLensProvider implements vscode.CodeLensProvider {
   private readonly changes = new vscode.EventEmitter<void>();
@@ -118,8 +186,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       graph = await scanner.scan(root);
       tree.update(graph);
       codeLenses.refresh();
-      status.text = `$(type-hierarchy) LaraScura ${graph.nodes.length}`;
-      status.tooltip = `${graph.projectName}: ${graph.nodes.length} nodes, ${graph.edges.length} connections`;
+      void publishFindings(graph.findings);
+      const issues = graph.findings.filter((finding) => finding.severity === 'warning').length;
+      status.text = `$(type-hierarchy) LaraScura ${graph.nodes.length}${issues ? ` $(warning) ${issues}` : ''}`;
+      status.tooltip = `${graph.projectName}: ${graph.nodes.length} nodes, ${graph.edges.length} connections`
+        + (graph.findings.length ? `, ${graph.findings.length} LaraScura Doctor finding(s) in the Problems panel` : '');
       return graph;
     } finally {
       if (!graph) status.text = '$(type-hierarchy) LaraScura';
@@ -149,6 +220,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     status,
     vscode.window.registerTreeDataProvider('larascura.explorer', tree),
     vscode.languages.registerCodeLensProvider({ language: 'php', scheme: 'file' }, codeLenses),
+    diagnostics,
+    vscode.languages.registerCodeActionsProvider({ language: 'php', scheme: 'file' }, new LaraScuraQuickFixProvider(), {
+      providedCodeActionKinds: LaraScuraQuickFixProvider.kinds,
+    }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('larascura.codeLens')) codeLenses.refresh();
     }),

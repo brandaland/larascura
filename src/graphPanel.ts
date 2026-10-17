@@ -72,7 +72,7 @@ export class GraphPanel {
       GraphPanel.current = undefined;
     }, null, context.subscriptions);
     this.panel.webview.onDidReceiveMessage(
-      async (message: { type?: string; nodeId?: string; edgeId?: string }) => {
+      async (message: { type?: string; nodeId?: string; edgeId?: string; index?: number }) => {
         if (message.type === 'ready') {
           this.ready = true;
           this.postGraph();
@@ -98,6 +98,12 @@ export class GraphPanel {
         if (message.type === 'openEdge' && message.edgeId) {
           const edge = this.graph.edges.find((candidate) => candidate.id === message.edgeId);
           if (edge) await this.openLocation(edge.location);
+          return;
+        }
+        // Findings are addressed by index so the webview can only open locations the scanner produced.
+        if (message.type === 'openFinding' && typeof message.index === 'number') {
+          const finding = this.graph.findings[message.index];
+          if (finding) await this.openLocation(finding);
         }
       },
       null,
@@ -218,6 +224,17 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .code { margin-top: 9px; padding: 9px; overflow: auto; color: var(--vscode-textPreformat-foreground); background: var(--vscode-textCodeBlock-background); border-radius: 6px; font-family: var(--vscode-editor-font-family); font-size: 11px; white-space: pre-wrap; }
     .source-button { width: 100%; margin-top: 14px; }
     .warning { padding: 8px 10px; color: var(--vscode-editorWarning-foreground); background: var(--vscode-inputValidation-warningBackground); border: 1px solid var(--vscode-inputValidation-warningBorder); border-radius: 6px; font-size: 11px; }
+    .doctor-summary { display: grid; width: 100%; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 9px 11px; color: var(--vscode-foreground); background: color-mix(in srgb, var(--doctor-color) 10%, transparent); border: 1px solid color-mix(in srgb, var(--doctor-color) 45%, transparent); border-radius: 8px; font-size: 11px; text-align: left; cursor: pointer; }
+    .doctor-summary:hover { background: color-mix(in srgb, var(--doctor-color) 18%, transparent); }
+    .doctor-pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--doctor-color); box-shadow: 0 0 0 4px color-mix(in srgb, var(--doctor-color) 22%, transparent); }
+    .doctor-summary strong { display: block; font-size: 12px; }
+    .doctor-summary span.doctor-detail { color: var(--vscode-descriptionForeground); }
+    .finding-list { display: grid; gap: 4px; }
+    .finding { display: grid; width: 100%; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; padding: 8px; color: var(--vscode-foreground); background: transparent; border: 1px solid var(--vscode-panel-border); border-left: 3px solid var(--finding-color); border-radius: 6px; font-size: 11px; line-height: 1.45; text-align: left; cursor: pointer; }
+    .finding:hover { background: var(--vscode-list-hoverBackground); }
+    .finding-icon { color: var(--finding-color); }
+    .finding-location { display: block; margin-top: 3px; overflow-wrap: anywhere; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; }
+    .unresolved-list { margin: 0; padding-left: 16px; color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.5; }
     .specimen { margin: 0 4px 14px; padding: 12px 12px 10px; border: 1px solid var(--vscode-panel-border); border-radius: 10px; background: color-mix(in srgb, var(--vscode-editor-background) 65%, transparent); }
     .specimen-eyebrow { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 9px; letter-spacing: .18em; text-transform: uppercase; }
     .specimen-name { display: block; width: 100%; margin: 5px 0 3px; padding: 0; overflow: hidden; color: var(--vscode-foreground); background: none; border: 0; font-size: 13px; font-weight: 700; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -1077,6 +1094,74 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       showNode(node);
     }
 
+    const findingColors = { warning: '#f59e0b', information: '#3b82f6' };
+
+    function doctorSummary() {
+      const findings = graph.findings || [];
+      if (!findings.length && !graph.warnings.length) return null;
+      const mistakes = findings.filter(finding => finding.severity === 'warning').length;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'doctor-summary';
+      button.style.setProperty('--doctor-color', mistakes ? findingColors.warning : findingColors.information);
+      const body = document.createElement('span');
+      body.append(
+        text('strong', mistakes ? 'Doctor · ' + mistakes + ' possible mistake' + (mistakes === 1 ? '' : 's') : 'Doctor · no mistakes found'),
+        text('span', (findings.length - mistakes ? (findings.length - mistakes) + ' tip(s) · ' : '') + graph.warnings.length + ' left unresolved', 'doctor-detail')
+      );
+      button.append(text('span', '', 'doctor-pulse'), body, text('span', '›'));
+      button.addEventListener('click', showDoctor);
+      return button;
+    }
+
+    function relativePath(file) {
+      const root = graph.root.replaceAll('\\\\', '/').replace(/\\/$/, '') + '/';
+      const normalized = file.replaceAll('\\\\', '/');
+      return normalized.startsWith(root) ? normalized.slice(root.length) : normalized;
+    }
+
+    function showDoctor() {
+      selected = null;
+      render();
+      openInspector('LaraScura Doctor');
+      detailContent.replaceChildren();
+      detailContent.style.removeProperty('--detail-color');
+      const findings = graph.findings || [];
+      detailContent.append(
+        text('span', 'doctor', 'badge'),
+        text('h2', findings.length ? findings.length + ' finding' + (findings.length === 1 ? '' : 's') : 'No mistakes found'),
+        text('p', 'Route actions, controllers, middleware aliases, views, model relations and duplicate routes, checked without running your app.', 'qualified')
+      );
+      if (findings.length) {
+        const list = document.createElement('div');
+        list.className = 'finding-list';
+        findings.forEach((finding, index) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'finding';
+          button.style.setProperty('--finding-color', findingColors[finding.severity] || findingColors.information);
+          const body = document.createElement('span');
+          body.append(text('span', finding.message), text('span', relativePath(finding.file) + ':' + finding.line, 'finding-location'));
+          button.append(text('span', finding.severity === 'warning' ? '⚠' : 'ℹ', 'finding-icon'), body);
+          button.addEventListener('click', () => vscode.postMessage({ type: 'openFinding', index }));
+          list.append(button);
+        });
+        const section = document.createElement('section');
+        section.className = 'section';
+        section.append(text('h3', 'Findings'), list);
+        detailContent.append(section);
+      }
+      if (graph.warnings.length) {
+        const list = document.createElement('ul');
+        list.className = 'unresolved-list';
+        graph.warnings.forEach(warning => list.append(text('li', warning)));
+        const section = document.createElement('section');
+        section.className = 'section';
+        section.append(text('h3', 'Left unresolved instead of guessed'), list);
+        detailContent.append(section);
+      }
+    }
+
     window.addEventListener('message', event => {
       if (event.data?.type === 'focus') {
         focusNode(event.data.nodeId);
@@ -1087,10 +1172,8 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       document.title = 'LaraScura — ' + graph.projectName;
       renderTree();
       render();
-      if (graph.warnings.length) {
-        const warning = text('div', graph.warnings.length + ' dynamic or unresolved connection(s) were kept as warnings instead of being guessed.', 'warning');
-        detailContent.prepend(warning);
-      }
+      const summary = doctorSummary();
+      if (summary) detailContent.prepend(summary);
     });
     search.addEventListener('input', render);
     document.getElementById('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0
+
+- Added **LaraScura Doctor**, static checks that catch Laravel mistakes before a page is opened:
+  - route actions missing from their controller (`'indx'` → *Did you mean "index"?*) and single-action controllers without `__invoke()`;
+  - resource routes whose controller lacks some actions, with advice to add `->except([...])`;
+  - controllers and related models that do not exist;
+  - misspelled middleware aliases (`'atuh'` → `auth`);
+  - views missing from `resources/views`;
+  - routes defined twice in the same file, where only the last one runs;
+  - namespaces whose letter case does not match their PSR-4 folder.
+- Findings appear in the Problems panel and as squiggles in the editor. Safe typos come with a one-click quick fix, and the status bar shows how many possible mistakes there are.
+- The warning box in the map is now a clickable Doctor summary that lists every finding and opens it in the editor. Connections that could not be resolved are listed too.
+- Doctor stays quiet when an action could come from a trait, an unknown parent class, or `__call()`, and when views come from extra view paths. Turn it off with `larascura.doctor`.
+- Class names are matched case-insensitively, as PHP does.
+
 ## 0.4.1
 
 - The map now fits the visible area without shrinking nodes: layers that do not fit wrap into another row, long layers spread over spare columns, and the layout follows window resizes and zoom.

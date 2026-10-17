@@ -35,7 +35,7 @@ describe('LaraScura architecture webview', () => {
       root: '/workspace/example',
       sourceDirectories: ['app', 'routes'],
       generatedAt: new Date(0).toISOString(),
-      warnings: [],
+      warnings: [], findings: [],
       nodes: [
         {
           id: 'route:orders',
@@ -152,7 +152,7 @@ describe('LaraScura architecture webview', () => {
       root: '/workspace/example',
       sourceDirectories: ['app', 'routes'],
       generatedAt: new Date(0).toISOString(),
-      warnings: [],
+      warnings: [], findings: [],
       edges: [],
       nodes: [
         route('route:index', 'GET /admin/posts'),
@@ -199,7 +199,7 @@ describe('LaraScura architecture webview', () => {
       root: '/workspace/example',
       sourceDirectories: ['app', 'routes'],
       generatedAt: new Date(0).toISOString(),
-      warnings: [],
+      warnings: [], findings: [],
       nodes: [node('controller', 'controller'), node('service', 'service')],
       edges: [
         {
@@ -263,7 +263,7 @@ describe('LaraScura architecture webview', () => {
       root: '/workspace/example',
       sourceDirectories: ['app', 'routes'],
       generatedAt: new Date(0).toISOString(),
-      warnings: [],
+      warnings: [], findings: [],
       nodes: [
         node('job:mail', 'SendMailJob', 'job'),
         node('job:sms', 'SendSmsJob', 'job'),
@@ -332,7 +332,7 @@ describe('LaraScura architecture webview', () => {
       root: '/workspace/example',
       sourceDirectories: ['app', 'routes'],
       generatedAt: new Date(0).toISOString(),
-      warnings: [],
+      warnings: [], findings: [],
       nodes: [
         node('route:delete', 'POST /account/delete', 'route'),
         node('route:cart', 'GET /cart', 'route'),
@@ -424,7 +424,7 @@ describe('LaraScura architecture webview', () => {
       });
       const graph: ArchitectureGraph = {
         projectName: 'example/app', root: '/workspace/example', sourceDirectories: ['app', 'routes'],
-        generatedAt: new Date(0).toISOString(), warnings: [], nodes, edges: [],
+        generatedAt: new Date(0).toISOString(), warnings: [], findings: [], nodes, edges: [],
       };
       dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph } }));
       return { dom, errors };

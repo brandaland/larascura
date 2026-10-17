@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ambiguousClassNames, createClassNameIndex, resolveClassName } from './classResolver.js';
 import { kindSummary, parseMiddlewareAliases, parsePhpClass, parseRoutes } from './phpParser.js';
+import { diagnose } from './doctor.js';
 import { isRouteFile, phpGlob, sourceDirectories } from './projectLayout.js';
 import type {
   ArchitectureEdge,
@@ -145,6 +146,32 @@ export const scanDirectories = async (root: vscode.Uri): Promise<string[]> => {
   return sourceDirectories(composer, hasModules);
 };
 
+/**
+ * View names under resources/views (users/index.blade.php → users.index). Returns undefined when
+ * config/view.php adds other view paths, because a missing view could then live elsewhere.
+ */
+const viewNamesOf = async (root: vscode.Uri, token?: vscode.CancellationToken): Promise<Set<string> | undefined> => {
+  try {
+    const config = decode(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, 'config', 'view.php')));
+    const paths = config.match(/['"]paths['"]\s*=>\s*\[([^\]]*)\]/)?.[1] ?? '';
+    if (paths.replace(/resource_path\(\s*['"]views['"]\s*\)/, '').replace(/[\s,]/g, '')) return undefined;
+  } catch {
+    // No config/view.php means the default resources/views path.
+  }
+  try {
+    const stat = await vscode.workspace.fs.stat(vscode.Uri.joinPath(root, 'resources', 'views'));
+    if (stat.type !== vscode.FileType.Directory) return undefined;
+  } catch {
+    return undefined;
+  }
+  const files = await vscode.workspace.findFiles(new vscode.RelativePattern(root, 'resources/views/**/*.php'), undefined, 20000, token);
+  const viewsRoot = normalize(path.join(root.fsPath, 'resources', 'views'));
+  return new Set(files.map((uri) => normalize(uri.fsPath)
+    .slice(viewsRoot.length + 1)
+    .replace(/(\.blade)?\.php$/, '')
+    .replaceAll('/', '.')));
+};
+
 export class LaravelScanner {
   public async scan(root: vscode.Uri, token?: vscode.CancellationToken): Promise<ArchitectureGraph> {
     const lang = language();
@@ -222,8 +249,9 @@ export class LaravelScanner {
       );
     }
     const resolveClass = (name: string): string => resolveClassName(classNames, name);
+    // PHP class names are case-insensitive, so ...\\api\\UserController and ...\\Api\\UserController match.
     const findClassNode = (qualified: string): ArchitectureNode | undefined =>
-      [...nodes.values()].find((node) => node.qualifiedName === qualified);
+      [...nodes.values()].find((node) => node.qualifiedName?.toLowerCase() === qualified.toLowerCase());
     const ensureClassNode = (name: string, location: SourceLocation, preferred?: NodeKind): ArchitectureNode => {
       const qualified = resolveClass(name);
       const existing = findClassNode(qualified);
@@ -322,6 +350,8 @@ export class LaravelScanner {
       }
     }
 
+    const unresolvedMiddleware = new Set<string>();
+    const parsedRouteFiles: Array<{ file: string; source: string; routes: ReturnType<typeof parseRoutes> }> = [];
     const resolveMiddleware = (name: string, routeLocation: SourceLocation): ArchitectureNode => {
       const alias = name.split(':')[0] ?? name;
       const registered = name.includes('\\') ? { target: name } : middlewareAliases.get(alias);
@@ -356,7 +386,10 @@ export class LaravelScanner {
       const existing = nodes.get(id);
       if (existing) return existing;
       const isGroup = middlewareGroups.has(alias);
-      if (!isGroup) warnings.push(`Middleware alias '${alias}' could not be resolved to a class statically.`);
+      if (!isGroup) {
+        warnings.push(`Middleware alias '${alias}' could not be resolved to a class statically.`);
+        unresolvedMiddleware.add(alias);
+      }
       const created: ArchitectureNode = {
         id,
         label: alias,
@@ -377,7 +410,9 @@ export class LaravelScanner {
     };
 
     for (const routeFile of routeFiles) {
-      for (const route of parseRoutes(routeFile.source)) {
+      const routes = parseRoutes(routeFile.source);
+      parsedRouteFiles.push({ ...routeFile, routes });
+      for (const route of routes) {
         const routeLabel = `${route.method} /${route.uri.replace(/^\//, '')}`;
         const routeLocation = {
           file: routeFile.file,
@@ -420,6 +455,16 @@ export class LaravelScanner {
       warnings.push('composer.json could not be parsed; the folder name is used as the project name.');
     }
 
+    const findings = vscode.workspace.getConfiguration('larascura').get<boolean>('doctor', true)
+      ? diagnose({
+        classes,
+        routeFiles: parsedRouteFiles,
+        knownMiddleware: new Set([...middlewareAliases.keys(), ...middlewareGroups]),
+        unresolvedMiddleware,
+        viewNames: await viewNamesOf(root, token),
+      })
+      : [];
+
     return {
       projectName,
       root: root.fsPath,
@@ -428,6 +473,7 @@ export class LaravelScanner {
       nodes: [...nodes.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label)),
       edges: [...edges.values()],
       warnings: [...new Set(warnings)].slice(0, 100),
+      findings,
     };
   }
 }

@@ -27,6 +27,7 @@ LaraScura was created for people who understand systems better through flows and
 - Maps service-container bindings
 - Classifies controllers, services, repositories, models, jobs, events, listeners, providers, and commands
 - Opens the exact source line from every node and connection
+- **LaraScura Doctor** finds missing controller methods and views, misspelled middleware, missing models, and duplicate routes, with "Did you mean…?" quick fixes
 - Shows CodeLens above routes, controller actions, and classes, and reveals the current file in the map
 - Scans PSR-4 autoload directories and `Modules/`, not only `app/`
 - Explains Laravel concepts in English or Turkish
@@ -79,7 +80,7 @@ Marketplace identifier: `ooll.larascura`
 
 ~~~bash
 npm run package:vsix
-code --install-extension larascura-0.4.1.vsix
+code --install-extension larascura-0.5.0.vsix
 ~~~
 
 ## Static-analysis boundaries
