@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1
+
+- The map now fits the visible area without shrinking nodes: layers that do not fit wrap into another row, long layers spread over spare columns, and the layout follows window resizes and zoom.
+- Added a right-click menu. On a node: show its request flow or direct connections, or open its source. On the canvas: arrange to fit the screen, zoom to 100%, or go back to the overview.
+
 ## 0.4.0
 
 - Added CodeLens: routes show the controller action that handles them, controller actions show every route and middleware that reaches them, and each class shows its connection count.

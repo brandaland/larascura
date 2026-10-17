@@ -186,7 +186,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .scope-name { color: var(--vscode-foreground); font-weight: 650; }
     .scope-note { margin-left: auto; }
     .viewport { position: relative; overflow: auto; background-image: radial-gradient(var(--vscode-panel-border) 0.7px, transparent 0.7px); background-size: 18px 18px; }
-    .stage { position: relative; min-width: 1100px; min-height: 760px; transform-origin: top left; }
+    .stage { position: relative; transform-origin: top left; }
     .edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
     .edge-visible { stroke: var(--vscode-descriptionForeground); stroke-width: 1.2; opacity: .42; fill: none; }
     .edge-hit { stroke: transparent; stroke-width: 14; fill: none; pointer-events: stroke; cursor: pointer; }
@@ -260,6 +260,13 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .emblem-route { fill: #22c55e; } .emblem-middleware { fill: #f59e0b; } .emblem-controller { fill: #3b82f6; }
     .emblem-service { fill: #8b5cf6; } .emblem-model { fill: #ef4444; } .emblem-event { fill: #eab308; }
     .emblem-caption { margin-top: 12px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; letter-spacing: .04em; }
+    .context-menu { position: fixed; z-index: 30; min-width: 210px; padding: 4px; color: var(--vscode-menu-foreground, var(--vscode-foreground)); background: var(--vscode-menu-background, var(--vscode-editorWidget-background)); border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border)); border-radius: 7px; box-shadow: 0 10px 28px rgba(0,0,0,.28); }
+    .context-menu[hidden] { display: none; }
+    .context-title { padding: 5px 10px 4px; overflow: hidden; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; letter-spacing: .06em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+    .context-item { display: flex; width: 100%; align-items: center; gap: 8px; padding: 6px 10px; color: inherit; background: transparent; border: 0; border-radius: 4px; font-size: 12px; text-align: left; cursor: pointer; }
+    .context-item:hover, .context-item:focus-visible { color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground)); background: var(--vscode-menu-selectionBackground, var(--vscode-list-activeSelectionBackground)); outline: none; }
+    .context-icon { width: 14px; opacity: .75; text-align: center; }
+    .context-separator { height: 1px; margin: 4px 6px; background: var(--vscode-menu-separatorBackground, var(--vscode-panel-border)); }
     .hidden { display: none !important; }
     @media (max-width: 1050px) {
       .workspace { grid-template-columns: 220px 1fr; }
@@ -315,6 +322,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         </div>
       </aside>
     </div>
+    <div id="contextMenu" class="context-menu" role="menu" hidden></div>
   </div>
   <script nonce="${token}">
     const vscode = acquireVsCodeApi();
@@ -353,6 +361,8 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     const stats = document.getElementById('stats');
     const scopeName = document.getElementById('scopeName');
     const scopeNote = document.getElementById('scopeNote');
+    const viewport = document.getElementById('viewport');
+    const scopeBar = document.getElementById('scopeBar');
     const svgNs = 'http://www.w3.org/2000/svg';
 
     function text(tag, value, className) {
@@ -786,8 +796,8 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         positions.set(node.id, next);
         button.style.left = next.x + 'px';
         button.style.top = next.y + 'px';
-        const width = Math.max(1100, next.x + 220, ...[...positions.values()].map(position => position.x + 220));
-        const height = Math.max(760, next.y + 110, ...[...positions.values()].map(position => position.y + 110));
+        const width = Math.max(parseFloat(stage.style.width) || 0, next.x + nodeWidth + padX);
+        const height = Math.max(parseFloat(stage.style.height) || 0, next.y + 110);
         stage.style.width = width + 'px';
         stage.style.height = height + 'px';
         edgesRoot.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
@@ -815,49 +825,102 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       });
     }
 
+    const nodeWidth = 172;
+    const padX = 34;
+    const firstRowY = 54;
+    const minColumnStep = 204;
+    const maxColumnStep = 230;
+    const rowStep = 86;
+    const bandGap = 88;
+    let lastRendered = null;
+
+    // Lays layer groups out to fit the visible width without shrinking nodes: layers that do not
+    // fit wrap into another band below, and spare columns go to the tallest layers.
+    function arrangeLayers(groups, availableWidth, availableHeight) {
+      const usable = availableWidth > 0 ? availableWidth : 1100;
+      const columnsFit = Math.max(1, Math.floor((usable - padX * 2 - nodeWidth) / minColumnStep) + 1);
+      const rowsFit = availableHeight > 0 ? Math.max(3, Math.floor((availableHeight - firstRowY - 24) / rowStep)) : Infinity;
+      const placements = [];
+      const labels = [];
+      let bandTop = firstRowY;
+      for (let start = 0; start < groups.length; start += columnsFit) {
+        const band = groups.slice(start, start + columnsFit);
+        const spans = band.map(() => 1);
+        for (let spare = columnsFit - band.length; spare > 0; spare--) {
+          let tallest = -1;
+          let tallestRows = rowsFit;
+          band.forEach((group, index) => {
+            const rows = Math.ceil(group.nodes.length / spans[index]);
+            if (rows > tallestRows) { tallest = index; tallestRows = rows; }
+          });
+          if (tallest < 0) break;
+          spans[tallest] += 1;
+        }
+        const totalColumns = spans.reduce((sum, span) => sum + span, 0);
+        const step = totalColumns > 1
+          ? Math.min(maxColumnStep, Math.max(minColumnStep, (usable - padX * 2 - nodeWidth) / (totalColumns - 1)))
+          : maxColumnStep;
+        let column = 0;
+        let bandRows = 1;
+        band.forEach((group, index) => {
+          const rowsPerColumn = Math.max(1, Math.ceil(group.nodes.length / spans[index]));
+          bandRows = Math.max(bandRows, rowsPerColumn);
+          labels.push({ text: group.kinds.join(' / '), x: padX + column * step, y: bandTop - 36, width: (spans[index] - 1) * step + nodeWidth });
+          group.nodes.forEach((node, nodeIndex) => {
+            placements.push({
+              node,
+              x: Math.round(padX + (column + Math.floor(nodeIndex / rowsPerColumn)) * step),
+              y: bandTop + (nodeIndex % rowsPerColumn) * rowStep
+            });
+          });
+          column += spans[index];
+        });
+        bandTop += bandRows * rowStep + bandGap;
+      }
+      return { placements, labels };
+    }
+
     function render() {
       if (!graph) return;
       nodesRoot.replaceChildren();
       edgesRoot.replaceChildren();
       positions = new Map();
       const current = scopedGraph();
+      lastRendered = current;
       const visible = current.nodes;
       const visibleIds = new Set(visible.map(node => node.id));
-      const columnWidth = 230;
-      const rowHeight = 86;
-      let maxRows = 1;
-      const compactColumns = scope.type !== 'overview' && scope.type !== 'all';
-      let renderedColumn = 0;
+      const groups = layers
+        .map(kinds => ({ kinds, nodes: visible.filter(node => kinds.includes(node.kind)) }))
+        .filter(group => group.nodes.length);
+      const layout = arrangeLayers(groups, viewport.clientWidth / zoomLevel, (viewport.clientHeight - scopeBar.offsetHeight) / zoomLevel);
 
-      layers.forEach((kinds, column) => {
-        const group = visible.filter(node => kinds.includes(node.kind));
-        if (compactColumns && !group.length) return;
-        const layoutColumn = compactColumns ? renderedColumn++ : column;
-        maxRows = Math.max(maxRows, group.length);
-        const label = text('div', kinds.join(' / '), 'column-label');
-        label.style.left = (34 + layoutColumn * columnWidth) + 'px';
+      for (const column of layout.labels) {
+        const label = text('div', column.text, 'column-label');
+        label.style.left = column.x + 'px';
+        label.style.top = column.y + 'px';
+        label.style.width = column.width + 'px';
         nodesRoot.appendChild(label);
-        group.forEach((node, row) => {
-          const automatic = { x: 34 + layoutColumn * columnWidth, y: 54 + row * rowHeight };
-          const custom = manualPositions.get(layoutKey(node.id));
-          const x = custom?.x ?? automatic.x;
-          const y = custom?.y ?? automatic.y;
-          positions.set(node.id, { x, y });
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'node' + (selected === node.id ? ' active' : '');
-          button.style.left = x + 'px';
-          button.style.top = y + 'px';
-          button.style.setProperty('--node-color', colors[node.kind] || colors.class);
-          button.dataset.nodeId = node.id;
-          button.append(text('span', node.kind, 'node-kind'), text('span', node.label, 'node-label'));
-          makeDraggable(button, node, current, visibleIds);
-          nodesRoot.appendChild(button);
-        });
-      });
+      }
+      for (const { node, x: autoX, y: autoY } of layout.placements) {
+        const custom = manualPositions.get(layoutKey(node.id));
+        const x = custom?.x ?? autoX;
+        const y = custom?.y ?? autoY;
+        positions.set(node.id, { x, y });
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'node' + (selected === node.id ? ' active' : '');
+        button.style.left = x + 'px';
+        button.style.top = y + 'px';
+        button.style.setProperty('--node-color', colors[node.kind] || colors.class);
+        button.dataset.nodeId = node.id;
+        button.append(text('span', node.kind, 'node-kind'), text('span', node.label, 'node-label'));
+        makeDraggable(button, node, current, visibleIds);
+        nodesRoot.appendChild(button);
+      }
 
-      const width = Math.max(1100, 70 + layers.length * columnWidth, ...[...positions.values()].map(position => position.x + 220));
-      const height = Math.max(760, 100 + maxRows * rowHeight, ...[...positions.values()].map(position => position.y + 110));
+      const fitWidth = viewport.clientWidth > 0 ? viewport.clientWidth / zoomLevel : 1100;
+      const width = Math.max(fitWidth, ...[...positions.values()].map(position => position.x + nodeWidth + padX));
+      const height = Math.max(400, ...[...positions.values()].map(position => position.y + 110));
       stage.style.width = width + 'px';
       stage.style.height = height + 'px';
       edgesRoot.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
@@ -1031,21 +1094,112 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     });
     search.addEventListener('input', render);
     document.getElementById('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));
-    document.getElementById('resetLayout').addEventListener('click', () => {
+    // Drops hand-placed positions in the current view and lays it out again for the visible area.
+    function arrangeToFit() {
       const prefix = (search.value.trim() ? 'search:' + search.value.trim().toLowerCase() : scopeKey(scope)) + '|';
       manualPositions = new Map([...manualPositions.entries()].filter(([key]) => !key.startsWith(prefix)));
       persistUiState();
       render();
+      viewport.scrollTo?.(0, 0);
+    }
+    document.getElementById('resetLayout').addEventListener('click', arrangeToFit);
+
+    const contextMenu = document.getElementById('contextMenu');
+    function hideContextMenu() {
+      contextMenu.hidden = true;
+      contextMenu.replaceChildren();
+    }
+    function showContextMenu(clientX, clientY, title, items) {
+      contextMenu.replaceChildren();
+      if (title) contextMenu.append(text('div', title, 'context-title'));
+      items.forEach(item => {
+        if (item === 'separator') {
+          contextMenu.append(text('div', '', 'context-separator'));
+          return;
+        }
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'context-item';
+        button.setAttribute('role', 'menuitem');
+        button.append(text('span', item.icon, 'context-icon'), text('span', item.label));
+        button.addEventListener('click', () => {
+          hideContextMenu();
+          item.run();
+        });
+        contextMenu.append(button);
+      });
+      contextMenu.hidden = false;
+      const bounds = contextMenu.getBoundingClientRect();
+      contextMenu.style.left = Math.max(4, Math.min(clientX, window.innerWidth - bounds.width - 4)) + 'px';
+      contextMenu.style.top = Math.max(4, Math.min(clientY, window.innerHeight - bounds.height - 4)) + 'px';
+      contextMenu.querySelector('.context-item')?.focus();
+    }
+    function canvasItems() {
+      const items = [
+        { icon: '⤢', label: 'Arrange to fit screen', run: arrangeToFit },
+        { icon: '⌕', label: 'Zoom to 100%', run: () => setZoom(1) }
+      ];
+      if (scope.type !== 'overview' || search.value.trim()) {
+        items.push('separator', { icon: '◎', label: 'Back to overview', run: () => activateScope({ type: 'overview' }) });
+      }
+      return items;
+    }
+    function nodeItems(node) {
+      if (node.aggregateKind) {
+        return [{ icon: '▸', label: 'Open ' + (kindLabels[node.aggregateKind] || node.aggregateKind), run: () => activateScope({ type: 'kind', value: node.aggregateKind }) }, 'separator', ...canvasItems()];
+      }
+      const items = [];
+      if (node.kind === 'route') items.push({ icon: '⇢', label: 'Show request flow', run: () => focusNode(node.id) });
+      items.push({ icon: '✳', label: 'Show direct connections', run: () => {
+        search.value = '';
+        scope = { type: 'node', value: node.id };
+        renderTree();
+        showNode(node);
+      } });
+      if (node.location) items.push({ icon: '↗', label: 'Open source beside', run: () => vscode.postMessage({ type: 'openNode', nodeId: node.id }) });
+      return [...items, 'separator', ...canvasItems()];
+    }
+    viewport.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      const nodeElement = event.target.closest?.('.node');
+      const node = nodeElement && lastRendered?.nodes.find(candidate => candidate.id === nodeElement.dataset.nodeId);
+      if (node) showContextMenu(event.clientX, event.clientY, node.label, nodeItems(node));
+      else showContextMenu(event.clientX, event.clientY, 'Map', canvasItems());
     });
+    document.addEventListener('pointerdown', event => {
+      if (!contextMenu.hidden && !contextMenu.contains(event.target)) hideContextMenu();
+    });
+    viewport.addEventListener('scroll', hideContextMenu);
+    window.addEventListener('blur', hideContextMenu);
     document.getElementById('minimizeDetail').addEventListener('click', () => setInspectorState('minimized'));
     document.getElementById('closeDetail').addEventListener('click', () => setInspectorState('closed'));
     document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !contextMenu.hidden) {
+        hideContextMenu();
+        return;
+      }
       if (event.key === 'Escape' && inspectorState !== 'closed') setInspectorState('closed');
     });
-    document.getElementById('zoom').addEventListener('input', event => {
-      zoomLevel = Number(event.target.value) / 100;
+    function setZoom(level) {
+      zoomLevel = level;
+      zoomInput.value = String(Math.round(level * 100));
       stage.style.transform = 'scale(' + zoomLevel + ')';
-    });
+      // Zooming out frees room for more columns, so the layout is recomputed for the new width.
+      render();
+    }
+    const zoomInput = document.getElementById('zoom');
+    zoomInput.addEventListener('input', event => setZoom(Number(event.target.value) / 100));
+
+    let lastViewportWidth = 0;
+    let resizeTimer = null;
+    const relayoutOnResize = () => {
+      if (!graph || Math.abs(viewport.clientWidth - lastViewportWidth) < 24) return;
+      lastViewportWidth = viewport.clientWidth;
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(render, 120);
+    };
+    if (typeof ResizeObserver === 'function') new ResizeObserver(relayoutOnResize).observe(viewport);
+    else window.addEventListener('resize', relayoutOnResize);
     restoreUiState();
     vscode.postMessage({ type: 'ready' });
   </script>

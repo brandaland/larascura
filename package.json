@@ -2,7 +2,7 @@
   "name": "larascura",
   "displayName": "LaraScura",
   "description": "Visualize Laravel architecture, follow request flows, and understand the syntax.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "ooll",
   "author": {
     "name": "Ozkan A."

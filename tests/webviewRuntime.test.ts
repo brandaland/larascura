@@ -219,7 +219,8 @@ describe('LaraScura architecture webview', () => {
     const overviewEdges = [...dom.window.document.querySelectorAll('.edge-group')];
     expect(overviewEdges).toHaveLength(1);
     expect(overviewEdges[0]?.getAttribute('data-edge-id')).toBe('summary-edge:controller->service');
-    expect(overviewEdges[0]?.querySelector('.edge-visible')?.getAttribute('d')).toMatch(/^M 666 83 C .* 724 83$/);
+    // Empty layers take no column, so the controller (x 34..206) sits right beside the service (x 264).
+    expect(overviewEdges[0]?.querySelector('.edge-visible')?.getAttribute('d')).toMatch(/^M 206 83 C .* 264 83$/);
 
     dom.window.close();
   });
@@ -392,5 +393,99 @@ describe('LaraScura architecture webview', () => {
     expect(document.querySelector('#detailTitle')?.textContent).toBe('AccountService');
     expect(errors).toEqual([]);
     dom.window.close();
+  });
+
+  describe('viewport-fitting layout and context menu', () => {
+    const location = { file: '/workspace/example/app/File.php', line: 1 };
+    const node = (id: string, kind: ArchitectureGraph['nodes'][number]['kind']) =>
+      ({ id, label: id, kind, location, summary: '', syntax: '' });
+    const open = (nodes: ArchitectureGraph['nodes'], width: number, height: number) => {
+      const errors: string[] = [];
+      const virtualConsole = new VirtualConsole();
+      virtualConsole.on('jsdomError', (error) => errors.push(error.message));
+      const dom = new JSDOM(createGraphHtml('test-nonce'), {
+        runScripts: 'dangerously',
+        pretendToBeVisual: true,
+        virtualConsole,
+        beforeParse(window) {
+          Object.assign(window, {
+            acquireVsCodeApi: () => ({ postMessage: () => undefined, getState: () => undefined, setState: () => undefined }),
+          });
+          // jsdom has no layout engine; pretend the map viewport has this size.
+          Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', {
+            configurable: true,
+            get() { return (this as HTMLElement).id === 'viewport' ? width : 0; },
+          });
+          Object.defineProperty(window.HTMLElement.prototype, 'clientHeight', {
+            configurable: true,
+            get() { return (this as HTMLElement).id === 'viewport' ? height : 0; },
+          });
+        },
+      });
+      const graph: ArchitectureGraph = {
+        projectName: 'example/app', root: '/workspace/example', sourceDirectories: ['app', 'routes'],
+        generatedAt: new Date(0).toISOString(), warnings: [], nodes, edges: [],
+      };
+      dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph } }));
+      return { dom, errors };
+    };
+    const allNodes = (dom: JSDOM) => {
+      const button = [...dom.window.document.querySelectorAll('.nav-button')]
+        .find((candidate) => candidate.textContent?.startsWith('All nodes')) as unknown as { click(): void };
+      button.click();
+      return [...dom.window.document.querySelectorAll('.node')].map((element) => ({
+        id: (element as HTMLElement).dataset.nodeId,
+        left: parseFloat((element as HTMLElement).style.left),
+        top: parseFloat((element as HTMLElement).style.top),
+      }));
+    };
+
+    it('wraps layers that do not fit the visible width into a second band without shrinking nodes', () => {
+      const { dom, errors } = open([
+        node('route', 'route'), node('middleware', 'middleware'), node('controller', 'controller'),
+        node('service', 'service'), node('model', 'model'), node('event', 'event'),
+      ], 700, 0);
+      const placed = allNodes(dom);
+      const top = (id: string) => placed.find((entry) => entry.id === id)?.top;
+
+      expect(['route', 'middleware', 'controller'].map(top)).toEqual([54, 54, 54]);
+      expect(['service', 'model', 'event'].map(top)).toEqual([228, 228, 228]);
+      expect(Math.max(...placed.map((entry) => entry.left)) + 172).toBeLessThanOrEqual(700);
+      expect(errors).toEqual([]);
+      dom.window.close();
+    });
+
+    it('spreads a tall layer over spare columns so it fits the visible height', () => {
+      const routes = Array.from({ length: 12 }, (_, index) => node('route' + index, 'route'));
+      const { dom } = open([...routes, node('controller', 'controller')], 1100, 400);
+      const placed = allNodes(dom).filter((entry) => entry.id?.startsWith('route'));
+
+      expect(new Set(placed.map((entry) => entry.left)).size).toBe(4);
+      expect(Math.max(...placed.map((entry) => entry.top))).toBe(54 + 2 * 86);
+      dom.window.close();
+    });
+
+    it('opens a context menu on nodes and on the empty canvas', () => {
+      const { dom, errors } = open([node('route', 'route'), node('controller', 'controller')], 1100, 600);
+      const document = dom.window.document;
+      allNodes(dom);
+      const target = document.querySelector('[data-node-id="controller"]')!;
+      target.dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 50 }));
+      const menu = document.querySelector('#contextMenu') as HTMLElement;
+      const labels = () => [...menu.querySelectorAll('.context-item')].map((item) => item.textContent);
+
+      expect(menu.hidden).toBe(false);
+      expect(labels()).toEqual(['✳Show direct connections', '↗Open source beside', '⤢Arrange to fit screen', '⌕Zoom to 100%', '◎Back to overview']);
+      (menu.querySelector('.context-item') as unknown as { click(): void }).click();
+      expect(menu.hidden).toBe(true);
+      expect(document.querySelector('#scopeName')?.textContent).toBe('Connections · controller');
+
+      document.querySelector('#viewport')!.dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      expect(labels()[0]).toBe('⤢Arrange to fit screen');
+      document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(menu.hidden).toBe(true);
+      expect(errors).toEqual([]);
+      dom.window.close();
+    });
   });
 });
