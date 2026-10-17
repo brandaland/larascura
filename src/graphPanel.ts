@@ -222,6 +222,8 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .detail-content { padding: 18px; }
     .detail-empty { margin-top: 28px; color: var(--vscode-descriptionForeground); line-height: 1.6; }
     .badge { display: inline-flex; padding: 3px 7px; border-radius: 999px; color: white; background: var(--detail-color, #7c3aed); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .doctor-badge { align-items: center; gap: 4px; }
+    .badge-icon { width: 9px; height: 9px; fill: currentColor; }
     .detail h2 { margin: 12px 0 4px; font-size: 18px; overflow-wrap: anywhere; }
     .qualified { margin: 0 0 18px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 11px; overflow-wrap: anywhere; }
     .section { padding: 14px 0; border-top: 1px solid var(--vscode-panel-border); }
@@ -1146,6 +1148,20 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       return normalized.startsWith(root) ? normalized.slice(root.length) : normalized;
     }
 
+    // A small rounded medical cross; the badge keeps its text so it still reads at a glance.
+    function doctorBadge() {
+      const badge = text('span', '', 'badge doctor-badge');
+      const icon = document.createElementNS(svgNs, 'svg');
+      icon.setAttribute('viewBox', '0 0 12 12');
+      icon.setAttribute('class', 'badge-icon');
+      icon.setAttribute('aria-hidden', 'true');
+      const cross = document.createElementNS(svgNs, 'path');
+      cross.setAttribute('d', 'M4.6 1h2.8a.6.6 0 0 1 .6.6V4h2.4a.6.6 0 0 1 .6.6v2.8a.6.6 0 0 1-.6.6H8v2.4a.6.6 0 0 1-.6.6H4.6a.6.6 0 0 1-.6-.6V8H1.6a.6.6 0 0 1-.6-.6V4.6a.6.6 0 0 1 .6-.6H4V1.6a.6.6 0 0 1 .6-.6Z');
+      icon.append(cross);
+      badge.append(icon, document.createTextNode('doctor'));
+      return badge;
+    }
+
     function showDoctor() {
       selected = null;
       render();
@@ -1154,7 +1170,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       detailContent.style.removeProperty('--detail-color');
       const findings = graph.findings || [];
       detailContent.append(
-        text('span', 'doctor', 'badge'),
+        doctorBadge(),
         text('h2', findings.length ? findings.length + ' finding' + (findings.length === 1 ? '' : 's') : 'No mistakes found'),
         text('p', 'Route actions, controllers, middleware aliases, views, model relations and duplicate routes, checked without running your app.', 'qualified')
       );

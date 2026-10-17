@@ -80,7 +80,7 @@ Marketplace identifier: `ooll.larascura`
 
 ~~~bash
 npm run package:vsix
-code --install-extension larascura-0.5.3.vsix
+code --install-extension larascura-0.5.4.vsix
 ~~~
 
 ## Static-analysis boundaries

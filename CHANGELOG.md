@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4
+
+- Added a small medical cross to the Doctor badge in the Inspector.
+
 ## 0.5.3
 
 - LaraScura Doctor now tells reachable breakage from leftovers. A broken route is marked **Reachable** when a view, script or class links to it by route name or URL (including hand-built URLs such as `"/currency/change/" + currency`), **Probably unused** when nothing does, and **External caller** for API routes and webhooks, which are called from outside the app. The linking places appear under the finding in the Problems panel and in the Doctor list, which now sorts reachable problems first.
