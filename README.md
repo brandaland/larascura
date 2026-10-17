@@ -80,7 +80,7 @@ Marketplace identifier: `ooll.larascura`
 
 ~~~bash
 npm run package:vsix
-code --install-extension larascura-0.5.0.vsix
+code --install-extension larascura-0.5.1.vsix
 ~~~
 
 ## Static-analysis boundaries
@@ -93,8 +93,7 @@ The scanner will become more precise over time while preserving this rule: **unc
 
 LaraScura is an early release. It maps what it can resolve statically and stays silent instead of guessing. It does not yet resolve:
 
-- Routes declared inside `Route::controller(...)->group(...)`. Their URI and middleware are correct, but the controller is reported as an unresolved handler.
-- Resource routes that name their controller as a string (`Route::resource('tags', 'TagController')`), and the plural `Route::resources()` / `Route::apiResources()` helpers.
+- String controller names (`'TagController'`, `'TagController@index'`) are linked only when exactly one class has that short name, because Laravel resolves them through a runtime namespace.
 - Classes that share a short name across namespaces. These are deliberately left unlinked rather than connected to the wrong class.
 - Middleware aliases registered by packages at runtime, and anything registered through macros or dynamic container bindings.
 
@@ -103,7 +102,7 @@ A missing connection means the syntax was not statically resolvable — not that
 ## Roadmap
 
 - ✅ Route-group prefix and inherited middleware resolution — completed in `0.2.2`
-- Controller resolution for `Route::controller(...)` groups
+- ✅ Controller resolution for `Route::controller(...)` groups, string resource controllers, and `Route::resources()` — completed in `0.5.1`
 - ✅ Event-to-listener registration mapping — completed in `0.3.0`
 - ✅ Laravel middleware alias resolution — completed in `0.3.0`
 - Method-level request journey view

@@ -427,7 +427,15 @@ interface RouteGroup {
   end: number;
   prefix?: string;
   middleware: string[];
+  /** Route::controller(X::class)->group(...): child routes name only the method. */
+  controller?: string;
 }
+
+// PHP applies `use` imports to X::class but not to strings, so string controller names stay as written.
+const controllerName = (classReference: string | undefined, stringReference: string | undefined, resolve: NameResolver): string | undefined => {
+  if (classReference) return resolve(classReference);
+  return stringReference ? stringReference.replace(/\\\\/g, '\\').replace(/^\\/, '') : undefined;
+};
 
 const closingBrace = (source: string, openingBrace: number): number | undefined => {
   let depth = 0;
@@ -501,11 +509,13 @@ const routeGroupsFrom = (source: string, resolve: NameResolver): RouteGroup[] =>
     }
     const arrayMiddleware = /['"]middleware['"]\s*=>\s*(\[[^\]]*\]|['"][^'"]+['"])/.exec(settings);
     if (arrayMiddleware?.[1]) middleware.push(...middlewareFrom(arrayMiddleware[1], resolve));
+    const controller = settings.match(/(?:controller\s*\(|['"]controller['"]\s*=>)\s*(?:([\\\w]+)::class|(['"])([\\\w]+)\2)/);
     groups.push({
       start: openingBrace,
       end,
       prefix: prefix?.[2] ?? prefix?.[4],
       middleware: [...new Set(middleware)],
+      controller: controllerName(controller?.[1], controller?.[3], resolve),
     });
   };
 
@@ -528,11 +538,12 @@ const routeContext = (
   index: number,
   uri: string,
   middleware: string[],
-): { uri: string; middleware: string[] } => {
+): { uri: string; middleware: string[]; controller?: string } => {
   const parents = groups.filter((group) => index > group.start && index < group.end).sort((a, b) => a.start - b.start);
   return {
     uri: joinedUri(...parents.flatMap((group) => (group.prefix ? [group.prefix] : [])), uri),
     middleware: [...new Set([...parents.flatMap((group) => group.middleware), ...middleware])],
+    controller: parents.map((group) => group.controller).filter(Boolean).at(-1),
   };
 };
 
@@ -563,8 +574,10 @@ const singularResource = (name: string): string => {
 };
 
 const resourceUri = (name: string): { base: string; parameter: string } => {
-  const resources = name.split('.').filter(Boolean);
-  const parts: string[] = [];
+  // 'admin/users' is the users resource under an admin/ prefix, so its parameter is {user}.
+  const prefix = name.includes('/') ? name.slice(0, name.lastIndexOf('/')) : '';
+  const resources = name.slice(prefix ? prefix.length + 1 : 0).split('.').filter(Boolean);
+  const parts: string[] = prefix ? [prefix] : [];
   resources.forEach((resource, index) => {
     parts.push(resource);
     if (index < resources.length - 1) parts.push(`{${singularResource(resource)}}`);
@@ -582,13 +595,49 @@ export const parseRoutes = (source: string): ParsedRoute[] => {
   const addRoute = (method: string, uri: string, handler: string, chain: string, index: number): void => {
     const middlewareCall = /->middleware\s*\(([^)]*)\)/.exec(chain);
     const context = routeContext(groups, index, uri, middlewareCall?.[1] ? middlewareFrom(middlewareCall[1], resolve) : []);
+    let target = parsedHandler(handler, imports, namespace);
+    // Inside Route::controller(X::class)->group(), a bare 'method' string targets X.
+    const methodOnly = /^\s*(['"])(\w+)\1\s*$/.exec(handler);
+    if (!target.controller && methodOnly?.[2] && context.controller) target = { controller: context.controller, action: methodOnly[2] };
     routes.push({
       method,
       uri: context.uri,
-      ...parsedHandler(handler, imports, namespace),
+      ...target,
       middleware: context.middleware,
       line: lineNumber(source, index),
     });
+  };
+  const addResource = (kind: string, name: string, controller: string, chain: string, index: number): void => {
+    const only = /->only\s*\(([^)]*)\)/.exec(chain)?.[1];
+    const except = /->except\s*\(([^)]*)\)/.exec(chain)?.[1];
+    const allowed = only ? new Set(stringsFrom(only)) : undefined;
+    const excluded = new Set(except ? stringsFrom(except) : []);
+    const { base, parameter } = resourceUri(name);
+    const definitions = [
+      ['index', 'GET', base],
+      ['create', 'GET', joinedUri(base, 'create')],
+      ['store', 'POST', base],
+      ['show', 'GET', joinedUri(base, `{${parameter}}`)],
+      ['edit', 'GET', joinedUri(base, `{${parameter}}`, 'edit')],
+      ['update', 'PUT|PATCH', joinedUri(base, `{${parameter}}`)],
+      ['destroy', 'DELETE', joinedUri(base, `{${parameter}}`)],
+    ] as const;
+    const middlewareCall = /->middleware\s*\(([^)]*)\)/.exec(chain);
+    for (const [action, method, uri] of definitions) {
+      if (kind.startsWith('api') && ['create', 'edit'].includes(action)) continue;
+      if (allowed && !allowed.has(action)) continue;
+      if (excluded.has(action)) continue;
+      const context = routeContext(groups, index, uri, middlewareCall?.[1] ? middlewareFrom(middlewareCall[1], resolve) : []);
+      routes.push({
+        method,
+        uri: context.uri,
+        controller,
+        action,
+        middleware: context.middleware,
+        line: lineNumber(source, index),
+        fromResource: true,
+      });
+    }
   };
 
   const routePattern = /Route::(get|post|put|patch|delete|options|any)\s*\(\s*(['"])(.*?)\2\s*,\s*([\s\S]*?)\)\s*((?:->[^;]+)?)\s*;/g;
@@ -604,39 +653,19 @@ export const parseRoutes = (source: string): ParsedRoute[] => {
     addRoute(methods, match[3] ?? '/', match[4] ?? '', match[5] ?? '', match.index);
   }
 
-  const resourcePattern = /Route::(apiResource|resource)\s*\(\s*(['"])(.*?)\2\s*,\s*([\\\w]+)::class\s*\)\s*((?:->[^;]+)?)\s*;/g;
+  const resourcePattern = /Route::(apiResource|resource)\s*\(\s*(['"])(.*?)\2\s*,\s*(?:([\\\w]+)::class|(['"])([\\\w]+)\5)\s*\)\s*((?:->[^;]+)?)\s*;/g;
   while ((match = resourcePattern.exec(source))) {
-    const controller = resolveName(match[4] ?? '', imports, namespace);
-    const chain = match[5] ?? '';
-    const only = /->only\s*\(([^)]*)\)/.exec(chain)?.[1];
-    const except = /->except\s*\(([^)]*)\)/.exec(chain)?.[1];
-    const allowed = only ? new Set(stringsFrom(only)) : undefined;
-    const excluded = new Set(except ? stringsFrom(except) : []);
-    const { base, parameter } = resourceUri(match[3] ?? 'resource');
-    const definitions = [
-      ['index', 'GET', base],
-      ['create', 'GET', joinedUri(base, 'create')],
-      ['store', 'POST', base],
-      ['show', 'GET', joinedUri(base, `{${parameter}}`)],
-      ['edit', 'GET', joinedUri(base, `{${parameter}}`, 'edit')],
-      ['update', 'PUT|PATCH', joinedUri(base, `{${parameter}}`)],
-      ['destroy', 'DELETE', joinedUri(base, `{${parameter}}`)],
-    ] as const;
-    for (const [action, method, uri] of definitions) {
-      if (match[1] === 'apiResource' && ['create', 'edit'].includes(action)) continue;
-      if (allowed && !allowed.has(action)) continue;
-      if (excluded.has(action)) continue;
-      const middlewareCall = /->middleware\s*\(([^)]*)\)/.exec(chain);
-      const context = routeContext(groups, match.index, uri, middlewareCall?.[1] ? middlewareFrom(middlewareCall[1], resolve) : []);
-      routes.push({
-        method,
-        uri: context.uri,
-        controller,
-        action,
-        middleware: context.middleware,
-        line: lineNumber(source, match.index),
-        fromResource: true,
-      });
+    const controller = controllerName(match[4], match[6], resolve);
+    if (controller) addResource(match[1] ?? 'resource', match[3] ?? 'resource', controller, match[7] ?? '', match.index);
+  }
+
+  // Route::resources(['photos' => PhotoController::class, ...]) registers one resource per entry.
+  const pluralPattern = /Route::(apiResources|resources)\s*\(\s*\[([\s\S]*?)\]\s*(?:,[^;]*)?\)\s*;/g;
+  while ((match = pluralPattern.exec(source))) {
+    const kind = (match[1] ?? 'resources').replace(/s$/, '');
+    for (const entry of (match[2] ?? '').matchAll(/(['"])(.*?)\1\s*=>\s*(?:([\\\w]+)::class|(['"])([\\\w]+)\4)/g)) {
+      const controller = controllerName(entry[3], entry[5], resolve);
+      if (controller && entry[2]) addResource(kind, entry[2], controller, '', match.index);
     }
   }
 

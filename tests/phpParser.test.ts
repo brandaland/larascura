@@ -347,6 +347,53 @@ describe('Laravel PHP syntax parser', () => {
     expect(routes[0]?.middleware).toEqual(['App\\Http\\Middleware\\EnsureAdmin', 'throttle:api']);
   });
 
+  it('links routes inside Route::controller()->group() to the group controller', () => {
+    const routes = parseRoutes([
+      '<?php',
+      'use App\\Http\\Controllers\\OrderController;',
+      'use App\\Http\\Controllers\\InvoiceController;',
+      "Route::controller(OrderController::class)->prefix('orders')->group(function () {",
+      "    Route::get('/', 'index');",
+      "    Route::post('/', 'store')->middleware('auth');",
+      "    Route::get('/pdf', [InvoiceController::class, 'pdf']);",
+      "    Route::controller(InvoiceController::class)->group(function () {",
+      "        Route::get('/invoices', 'list');",
+      '    });',
+      '});',
+      "Route::get('/outside', 'orphan');",
+    ].join('\n'));
+
+    expect(routes.map((route) => [route.method, route.uri, route.controller, route.action])).toEqual([
+      ['GET', '/orders', 'App\\Http\\Controllers\\OrderController', 'index'],
+      ['POST', '/orders', 'App\\Http\\Controllers\\OrderController', 'store'],
+      ['GET', '/orders/pdf', 'App\\Http\\Controllers\\InvoiceController', 'pdf'],
+      ['GET', '/orders/invoices', 'App\\Http\\Controllers\\InvoiceController', 'list'],
+      ['GET', '/outside', undefined, undefined],
+    ]);
+  });
+
+  it('expands string resource controllers and Route::resources()', () => {
+    const routes = parseRoutes([
+      '<?php',
+      'use App\\Http\\Controllers\\PhotoController;',
+      "Route::resource('tags', 'TagController')->only(['index']);",
+      "Route::apiResource('admin/users', 'Admin\\\\UserController')->only(['show']);",
+      'Route::resources([',
+      "    'photos' => PhotoController::class,",
+      "    'posts' => 'PostController',",
+      ']);',
+    ].join('\n'));
+
+    const summary = routes.map((route) => `${route.method} ${route.uri} ${route.controller}@${route.action}`);
+    expect(summary.slice(0, 2)).toEqual([
+      'GET /tags TagController@index',
+      'GET /admin/users/{user} Admin\\UserController@show',
+    ]);
+    expect(summary).toContain('GET /photos/{photo}/edit App\\Http\\Controllers\\PhotoController@edit');
+    expect(summary).toContain('DELETE /posts/{post} PostController@destroy');
+    expect(routes.filter((route) => route.controller === 'PostController')).toHaveLength(7);
+  });
+
   it('explains common Laravel syntax without a network service', () => {
     expect(explainSyntax("Route::post('/orders', [OrderController::class, 'store']);", 'tr')).toContain(
       'HTTP adresini',

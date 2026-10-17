@@ -67,7 +67,14 @@ export const diagnose = (input: DoctorInput): Finding[] => {
   const findings: Finding[] = [];
   // PHP class names are case-insensitive: App\Http\Controllers\api\X and ...\Api\X are the same class.
   const byLowerName = new Map([...input.classes.entries()].map(([name, entry]) => [name.toLowerCase(), entry]));
-  const classOf = (name: string) => byLowerName.get(name.toLowerCase());
+  const byShortName = new Map<string, Array<{ parsed: ParsedClass; file: string }>>();
+  for (const entry of input.classes.values()) {
+    const key = entry.parsed.shortName.toLowerCase();
+    byShortName.set(key, [...(byShortName.get(key) ?? []), entry]);
+  }
+  // String controllers ('TagController') carry no namespace; accept them only when the short name is unique.
+  const classOf = (name: string) => byLowerName.get(name.toLowerCase())
+    ?? (name.includes('\\') ? undefined : (byShortName.get(name.toLowerCase())?.length === 1 ? byShortName.get(name.toLowerCase())![0] : undefined));
   const projectRoots = new Set([...input.classes.keys()].map((name) => name.split('\\')[0]!.toLowerCase()));
   const isProjectClass = (name: string): boolean => projectRoots.has(name.split('\\')[0]!.toLowerCase());
   const classesOfKind = (kind: ParsedClass['kind']): string[] =>
