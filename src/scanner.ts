@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { kindSummary, parsePhpClass, parseRoutes } from './phpParser.js';
+import { ambiguousClassNames, createClassNameIndex, resolveClassName } from './classResolver.js';
+import { kindSummary, parseMiddlewareAliases, parsePhpClass, parseRoutes } from './phpParser.js';
 import type {
   ArchitectureEdge,
   ArchitectureGraph,
@@ -21,8 +22,26 @@ const language = (): 'en' | 'tr' => {
   return vscode.env.language.toLowerCase().startsWith('tr') ? 'tr' : 'en';
 };
 
+// Aliases Laravel registers itself (Illuminate\Foundation\Configuration\Middleware::defaultAliases).
+const frameworkMiddlewareAliases: Record<string, string> = {
+  auth: 'Illuminate\\Auth\\Middleware\\Authenticate',
+  'auth.basic': 'Illuminate\\Auth\\Middleware\\AuthenticateWithBasicAuth',
+  'auth.session': 'Illuminate\\Session\\Middleware\\AuthenticateSession',
+  'cache.headers': 'Illuminate\\Http\\Middleware\\SetCacheHeaders',
+  can: 'Illuminate\\Auth\\Middleware\\Authorize',
+  guest: 'Illuminate\\Auth\\Middleware\\RedirectIfAuthenticated',
+  'password.confirm': 'Illuminate\\Auth\\Middleware\\RequirePassword',
+  precognitive: 'Illuminate\\Foundation\\Http\\Middleware\\HandlePrecognitiveRequests',
+  signed: 'Illuminate\\Routing\\Middleware\\ValidateSignature',
+  throttle: 'Illuminate\\Routing\\Middleware\\ThrottleRequests',
+  verified: 'Illuminate\\Auth\\Middleware\\EnsureEmailIsVerified',
+};
+const middlewareGroups = new Set(['web', 'api']);
+
 const inferredKind = (name: string): NodeKind => {
   if (/Controller$/.test(name)) return 'controller';
+  if (/\\Http\\Middleware\\/.test(name)) return 'middleware';
+  if (/\\Http\\Requests\\/.test(name)) return 'request';
   if (/Repository$/.test(name)) return 'repository';
   if (/Service$/.test(name)) return 'service';
   if (/Job$/.test(name)) return 'job';
@@ -52,6 +71,12 @@ const edgeExplanation = (
     injects: tr
       ? `${source}, ${target} bağımlılığını type-hint ile ister; service container nesneyi oluşturup enjekte eder.`
       : `${source} type-hints ${target}; the service container constructs and injects it.`,
+    validates: tr
+      ? `${source}, ${detail} parametresini ${target} ile type-hint eder; Laravel doğrulama ve authorize() kontrolünü metot çalışmadan önce yapar. Doğrulama başarısız olursa metot hiç çağrılmaz.`
+      : `${source} type-hints ${target} for ${detail}; Laravel runs its validation rules and authorize() before the method executes. If validation fails, the method is never called.`,
+    resolves: tr
+      ? `Route model binding: Laravel URL'deki {${detail}} parametresiyle veritabanından ${target} kaydını bulup metoda verir. Kayıt yoksa otomatik 404 döner.`
+      : `Route model binding: Laravel uses the {${detail}} URL parameter to load a ${target} record and passes it to the method. A missing record returns a 404 automatically.`,
     calls: tr ? `${source}, ${target} sınıfını kullanır.` : `${source} uses ${target}.`,
     dispatches: tr
       ? `${source}, ${target} job’ını dispatch eder; iş queue yapılandırmasına göre yürütülür.`
@@ -59,7 +84,13 @@ const edgeExplanation = (
     fires: tr
       ? `${source}, ${target} event’ini yayınlar; kayıtlı listener’lar bağımsız olarak tepki verir.`
       : `${source} fires the ${target} event; registered listeners can react independently.`,
-    listens: tr ? `${source}, ${target} event’ini dinler.` : `${source} listens for ${target}.`,
+    listens: detail === 'registered'
+      ? tr
+        ? `${source}, ${target} event’ini dinler. Bu eşleşme bir service provider içinde açıkça kaydedilmiştir.`
+        : `${source} listens for ${target}. The pairing is registered explicitly in a service provider.`
+      : tr
+        ? `${source}, ${detail}() metodunda ${target} type-hint ettiği için bu event’i dinler. Laravel event discovery bu imzadan eşleşmeyi otomatik kurar.`
+        : `${source} listens for ${target} because its ${detail}() method type-hints it. Laravel's event discovery builds the pairing from this signature.`,
     relates: tr
       ? `${source} ile ${target} arasında ${detail} Eloquent ilişkisi tanımlanmıştır.`
       : `${source} defines a ${detail} Eloquent relationship with ${target}.`,
@@ -111,9 +142,26 @@ export class LaravelScanner {
     );
     const nodes = new Map<string, ArchitectureNode>();
     const classes = new Map<string, { parsed: ParsedClass; source: string; file: string }>();
-    const aliases = new Map<string, string>();
     const routeFiles: Array<{ file: string; source: string }> = [];
     const warnings: string[] = [];
+    const middlewareAliases = new Map<string, { target: string; location?: SourceLocation }>(
+      Object.entries(frameworkMiddlewareAliases).map(([alias, target]) => [alias, { target }]),
+    );
+    const collectMiddlewareAliases = (file: string, source: string): void => {
+      if (!/middlewareAliases|routeMiddleware|->alias\s*\(/.test(source)) return;
+      for (const alias of parseMiddlewareAliases(source)) {
+        middlewareAliases.set(alias.alias, {
+          target: alias.target,
+          location: { file, line: alias.line, preview: linePreview(source, alias.line) },
+        });
+      }
+    };
+    try {
+      const bootstrapUri = vscode.Uri.joinPath(root, 'bootstrap', 'app.php');
+      collectMiddlewareAliases(bootstrapUri.fsPath, decode(await vscode.workspace.fs.readFile(bootstrapUri)));
+    } catch {
+      // Laravel 10 and older register aliases in app/Http/Kernel.php instead.
+    }
 
     for (const uri of files) {
       if (token?.isCancellationRequested) throw new vscode.CancellationError();
@@ -121,13 +169,12 @@ export class LaravelScanner {
       const relative = normalize(path.relative(root.fsPath, uri.fsPath));
       if (relative.startsWith('routes/')) routeFiles.push({ file: uri.fsPath, source });
 
+      collectMiddlewareAliases(uri.fsPath, source);
       const parsed = parsePhpClass(relative, source);
       if (!parsed) continue;
       if (!includeRepositories && parsed.kind === 'repository') parsed.kind = 'service';
 
       classes.set(parsed.qualifiedName, { parsed, source, file: uri.fsPath });
-      aliases.set(parsed.shortName, parsed.qualifiedName);
-      aliases.set(parsed.qualifiedName, parsed.qualifiedName);
       nodes.set(nodeId(parsed.kind, parsed.qualifiedName), {
         id: nodeId(parsed.kind, parsed.qualifiedName),
         label: parsed.shortName,
@@ -149,7 +196,14 @@ export class LaravelScanner {
       });
     }
 
-    const resolveClass = (name: string): string => aliases.get(name) ?? aliases.get(name.split('\\').pop() ?? name) ?? name;
+    const classNames = createClassNameIndex(classes.keys());
+    const collisions = ambiguousClassNames(classNames);
+    if (collisions.length) {
+      warnings.push(
+        `${collisions.length} ambiguous short class name(s) were left unresolved instead of being guessed: ${collisions.slice(0, 8).join(', ')}${collisions.length > 8 ? ', …' : ''}`,
+      );
+    }
+    const resolveClass = (name: string): string => resolveClassName(classNames, name);
     const findClassNode = (qualified: string): ArchitectureNode | undefined =>
       [...nodes.values()].find((node) => node.qualifiedName === qualified);
     const ensureClassNode = (name: string, location: SourceLocation, preferred?: NodeKind): ArchitectureNode => {
@@ -204,6 +258,31 @@ export class LaravelScanner {
         const target = ensureClassNode(dependency.type, location);
         addEdge(owner, target, 'injects', 'injects', location, dependency.variable);
       }
+      for (const dependency of parsed.methodDependencies) {
+        // Request, Collection and other framework types appear everywhere; framework events stay useful.
+        if (dependency.type.startsWith('Illuminate\\') && !/\\Events\\/.test(dependency.type)) continue;
+        const location = { file, line: dependency.line, preview: linePreview(source, dependency.line) };
+        const target = ensureClassNode(dependency.type, location);
+        const isHandler = ['handle', '__invoke'].includes(dependency.method);
+        if (target.kind === 'event' && isHandler && owner.kind !== 'controller') {
+          addEdge(owner, target, 'listens', 'listens', location, dependency.method);
+        } else if (target.kind === 'request') {
+          addEdge(owner, target, 'validates', `${dependency.method}()`, location, `$${dependency.variable}`);
+        } else if (target.kind === 'model' && owner.kind === 'controller') {
+          addEdge(owner, target, 'resolves', `${dependency.method}($${dependency.variable})`, location, dependency.variable);
+        } else {
+          addEdge(owner, target, 'injects', `${dependency.method}()`, location, dependency.variable);
+        }
+      }
+      for (const registration of parsed.listeners) {
+        const location = { file, line: registration.line, preview: linePreview(source, registration.line) };
+        const listener = ensureClassNode(registration.listener, location, 'listener');
+        const event = ensureClassNode(registration.event, location, 'event');
+        const alreadyLinked = [...edges.values()].some(
+          (edge) => edge.kind === 'listens' && edge.source === listener.id && edge.target === event.id,
+        );
+        if (!alreadyLinked) addEdge(listener, event, 'listens', 'listens', location, 'registered');
+      }
       for (const relation of parsed.relations) {
         if (relation.target === 'polymorphic model') continue;
         const location = { file, line: relation.line, preview: linePreview(source, relation.line) };
@@ -223,6 +302,58 @@ export class LaravelScanner {
         addEdge(abstractNode, concreteNode, 'binds', 'binds to', location, 'container binding');
       }
     }
+
+    const resolveMiddleware = (name: string, routeLocation: SourceLocation): ArchitectureNode => {
+      const alias = name.split(':')[0] ?? name;
+      const registered = name.includes('\\') ? { target: name } : middlewareAliases.get(alias);
+      if (registered) {
+        const appClass = findClassNode(resolveClass(registered.target));
+        if (appClass) return appClass;
+        const id = nodeId('middleware', registered.target);
+        const existing = nodes.get(id);
+        if (existing) return existing;
+        const isFramework = registered.target.startsWith('Illuminate\\');
+        const created: ArchitectureNode = {
+          id,
+          label: name.includes('\\') ? (registered.target.split('\\').pop() ?? name) : alias,
+          qualifiedName: registered.target,
+          kind: 'middleware',
+          location: registered.location ?? routeLocation,
+          summary: kindSummary('middleware', lang),
+          syntax: isFramework
+            ? lang === 'tr'
+              ? `'${alias}' Laravel’in kendi middleware alias’ıdır ve ${registered.target} sınıfına çözümlenir.`
+              : `'${alias}' is a built-in Laravel middleware alias that resolves to ${registered.target}.`
+            : lang === 'tr'
+              ? `'${alias}' alias’ı ${registered.target} sınıfına kayıtlıdır, ancak sınıf dosyası taranan dizinlerde bulunamadı.`
+              : `'${alias}' is registered to ${registered.target}, but the class file was not found in the scanned directories.`,
+        };
+        nodes.set(id, created);
+        return created;
+      }
+
+      const id = nodeId('middleware', alias);
+      const existing = nodes.get(id);
+      if (existing) return existing;
+      const isGroup = middlewareGroups.has(alias);
+      if (!isGroup) warnings.push(`Middleware alias '${alias}' could not be resolved to a class statically.`);
+      const created: ArchitectureNode = {
+        id,
+        label: alias,
+        kind: 'middleware',
+        location: routeLocation,
+        summary: kindSummary('middleware', lang),
+        syntax: isGroup
+          ? lang === 'tr'
+            ? `'${alias}' tek bir sınıf değil, bir middleware grubudur. Laravel bu gruptaki middleware’leri sırayla çalıştırır (session, CSRF, cookie şifreleme vb.).`
+            : `'${alias}' is a middleware group rather than a single class. Laravel runs every middleware in the group in order (session, CSRF, cookie encryption, and so on).`
+          : lang === 'tr'
+            ? `'${alias}' alias’ı statik olarak bir sınıfa çözümlenemedi. Bir paket tarafından ya da çalışma zamanında kaydedilmiş olabilir.`
+            : `'${alias}' could not be resolved to a class statically. A package or runtime code may register it.`,
+      };
+      nodes.set(id, created);
+      return created;
+    };
 
     for (const routeFile of routeFiles) {
       for (const route of parseRoutes(routeFile.source)) {
@@ -252,18 +383,8 @@ export class LaravelScanner {
         }
 
         for (const middlewareName of route.middleware) {
-          const middleware: ArchitectureNode = {
-            id: nodeId('middleware', middlewareName),
-            label: middlewareName,
-            kind: 'middleware',
-            location: routeLocation,
-            summary: kindSummary('middleware', lang),
-            syntax: lang === 'tr'
-              ? 'Route middleware adı, Laravel middleware alias kayıtlarından gerçek sınıfa çözümlenir.'
-              : 'Laravel resolves this route middleware alias to its registered middleware class.',
-          };
-          nodes.set(middleware.id, nodes.get(middleware.id) ?? middleware);
-          addEdge(routeNode, nodes.get(middleware.id)!, 'middleware', 'passes through', routeLocation, middlewareName);
+          const middleware = resolveMiddleware(middlewareName, routeLocation);
+          addEdge(routeNode, middleware, 'middleware', middlewareName, routeLocation, middlewareName);
         }
       }
     }

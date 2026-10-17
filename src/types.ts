@@ -1,6 +1,7 @@
 export type NodeKind =
   | 'route'
   | 'middleware'
+  | 'request'
   | 'controller'
   | 'service'
   | 'repository'
@@ -16,6 +17,8 @@ export type RelationKind =
   | 'handles'
   | 'middleware'
   | 'injects'
+  | 'validates'
+  | 'resolves'
   | 'calls'
   | 'dispatches'
   | 'fires'
@@ -62,12 +65,20 @@ export interface ArchitectureGraph {
 export interface ParsedClass {
   qualifiedName: string;
   shortName: string;
-  kind: Exclude<NodeKind, 'route' | 'middleware'>;
+  kind: Exclude<NodeKind, 'route'>;
   line: number;
   dependencies: Array<{ type: string; variable: string; line: number }>;
+  methodDependencies: Array<{ method: string; type: string; variable: string; line: number }>;
+  listeners: Array<{ event: string; listener: string; line: number }>;
   relations: Array<{ type: string; target: string; line: number }>;
   dispatches: Array<{ type: 'job' | 'event'; target: string; line: number }>;
   bindings: Array<{ abstract: string; concrete: string; line: number }>;
+}
+
+export interface ParsedMiddlewareAlias {
+  alias: string;
+  target: string;
+  line: number;
 }
 
 export interface ParsedRoute {

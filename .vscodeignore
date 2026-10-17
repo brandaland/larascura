@@ -1,6 +1,8 @@
 .github/
 .vscode/
+.claude/
 .gitignore
+.DS_Store
 node_modules/
 src/
 tests/

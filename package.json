@@ -2,9 +2,21 @@
   "name": "larascura",
   "displayName": "LaraScura",
   "description": "Visualize Laravel architecture, follow request flows, and understand the syntax.",
-  "version": "0.2.1",
-  "publisher": "ozkan",
+  "version": "0.2.3",
+  "publisher": "ooll",
+  "author": {
+    "name": "Ozkan A."
+  },
+  "preview": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brandaland/larascura.git"
+  },
+  "bugs": {
+    "url": "https://github.com/brandaland/larascura/issues"
+  },
+  "homepage": "https://github.com/brandaland/larascura#readme",
   "icon": "media/larascura.png",
   "engines": {
     "vscode": "^1.95.0"
@@ -21,7 +33,18 @@
     "routes",
     "eloquent",
     "visualization",
-    "learning"
+    "learning",
+    "mind map",
+    "mindmap",
+    "architecture map",
+    "code map",
+    "diagram",
+    "schema",
+    "scheme",
+    "dependency graph",
+    "request flow",
+    "request lifecycle",
+    "laravel learning"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [

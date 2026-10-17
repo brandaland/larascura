@@ -10,14 +10,18 @@ It is designed for developers who want to understand Laravel—not merely browse
 
 LaraScura was created for people who understand systems better through flows and relationships than through punctuation and syntax. It is free because learning tools like this should be accessible to every young developer.
 
-> **Free forever. No telemetry, no subscriptions, no hidden costs—and no need to buy me a coffee. Just learn, build, and pass it on.**
+> **Free forever. No telemetry, no subscriptions, and no hidden costs. Just learn, build, and pass it on.**
 
-## First release
+## Features
 
 - Detects reusable Laravel projects through `artisan` and `composer.json`
 - Maps routes to controllers and actions
 - Shows route middleware
-- Detects constructor dependency injection
+- Understands common route groups, `Route::match`, resource routes, and API resource routes
+- Detects constructor and controller-action dependency injection
+- Shows Form Request validation and route model binding for each controller action
+- Links listeners to the events they handle, through event discovery or provider registration
+- Resolves middleware aliases (`auth`, `throttle`, your own `admin`) to the real middleware class
 - Maps Eloquent relationships
 - Detects jobs and events dispatched from classes
 - Maps service-container bindings
@@ -61,16 +65,20 @@ npm run compile
 
 Press `F5` in VS Code to launch an Extension Development Host.
 
-## Package and install
+## Install
+
+Install **LaraScura** from the Visual Studio Code Marketplace, then open a Laravel project and run:
+
+> LaraScura: Open Architecture Map
+
+Marketplace identifier: `ooll.larascura`
+
+## Package locally
 
 ~~~bash
 npm run package:vsix
-code --install-extension larascura-0.2.1.vsix
+code --install-extension larascura-0.2.2.vsix
 ~~~
-
-Then open any Laravel project and run:
-
-> LaraScura: Open Architecture Map
 
 ## Static-analysis boundaries
 
@@ -78,13 +86,26 @@ Laravel permits dynamic routes, runtime service-container bindings, macros, pack
 
 The scanner will become more precise over time while preserving this rule: **uncertainty must be visible**.
 
+## Known limitations
+
+LaraScura is an early release. It maps what it can resolve statically and stays silent instead of guessing. It does not yet resolve:
+
+- Routes declared inside `Route::controller(...)->group(...)`. Their URI and middleware are correct, but the controller is reported as an unresolved handler.
+- Resource routes that name their controller as a string (`Route::resource('tags', 'TagController')`), and the plural `Route::resources()` / `Route::apiResources()` helpers.
+- Classes that share a short name across namespaces. These are deliberately left unlinked rather than connected to the wrong class.
+- Middleware aliases registered by packages at runtime, and anything registered through macros or dynamic container bindings.
+
+A missing connection means the syntax was not statically resolvable — not that the connection does not exist.
+
 ## Roadmap
 
-- Route-group prefix and inherited middleware resolution
-- Event-to-listener registration mapping
-- Laravel middleware alias resolution
+- ✅ Route-group prefix and inherited middleware resolution — completed in `0.2.2`
+- Controller resolution for `Route::controller(...)` groups
+- ✅ Event-to-listener registration mapping — Unreleased
+- ✅ Laravel middleware alias resolution — Unreleased
 - Method-level request journey view
-- Form Request, Policy, Resource, Notification, Mail, and Observer nodes
+- ✅ Form Request nodes — Unreleased
+- Policy, Resource, Notification, Mail, and Observer nodes
 - Laravel-version-aware learning cards
 - Multi-project workspace comparison
 

@@ -47,7 +47,7 @@ export class GraphPanel {
       vscode.ViewColumn.One,
       {
         enableScripts: true,
-        retainContextWhenHidden: true,
+        retainContextWhenHidden: false,
         localResourceRoots: [],
       },
     );
@@ -105,7 +105,10 @@ export class GraphPanel {
     }
 
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(location.file));
-    const editor = await vscode.window.showTextDocument(document, { preview: true });
+    const editor = await vscode.window.showTextDocument(document, {
+      preview: true,
+      viewColumn: vscode.ViewColumn.Beside,
+    });
     const line = Math.max(0, Math.min(location.line - 1, document.lineCount - 1));
     const range = document.lineAt(line).range;
     editor.selection = new vscode.Selection(range.start, range.start);
@@ -242,17 +245,17 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
   <script nonce="${token}">
     const vscode = acquireVsCodeApi();
     const colors = {
-      route: '#22c55e', middleware: '#f59e0b', controller: '#3b82f6',
+      route: '#22c55e', middleware: '#f59e0b', request: '#f97316', controller: '#3b82f6',
       service: '#8b5cf6', repository: '#a855f7', model: '#ef4444',
       job: '#64748b', event: '#eab308', listener: '#14b8a6',
       provider: '#ec4899', command: '#06b6d4', class: '#94a3b8'
     };
     const layers = [
-      ['route'], ['middleware'], ['controller'], ['service', 'repository', 'provider'],
+      ['route'], ['middleware', 'request'], ['controller'], ['service', 'repository', 'provider'],
       ['model', 'class'], ['event', 'job', 'listener', 'command']
     ];
     const kindLabels = {
-      route: 'Routes', middleware: 'Middleware', controller: 'Controllers',
+      route: 'Routes', middleware: 'Middleware', request: 'Form Requests', controller: 'Controllers',
       service: 'Services', repository: 'Repositories', model: 'Models',
       job: 'Jobs', event: 'Events', listener: 'Listeners',
       provider: 'Providers', command: 'Commands', class: 'Other classes'
@@ -286,7 +289,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     }
 
     function routeModule(node) {
-      const uri = node.label.replace(/^[A-Z]+\\s+\\/?/, '');
+      const uri = node.label.replace(/^[A-Z|]+\\s+\\/?/, '');
       return uri.split('/').filter(Boolean)[0] || 'root';
     }
 
@@ -361,8 +364,13 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         const from = nodeKinds.get(edge.source);
         const to = nodeKinds.get(edge.target);
         if (!from || !to || from === to) continue;
-        const key = from + '->' + to;
-        const current = grouped.get(key) || { from, to, count: 0 };
+        const fromLayer = layers.findIndex(kinds => kinds.includes(from));
+        const toLayer = layers.findIndex(kinds => kinds.includes(to));
+        const shouldSwap = fromLayer > toLayer || (fromLayer === toLayer && from.localeCompare(to) > 0);
+        const sourceKind = shouldSwap ? to : from;
+        const targetKind = shouldSwap ? from : to;
+        const key = sourceKind + '->' + targetKind;
+        const current = grouped.get(key) || { from: sourceKind, to: targetKind, count: 0 };
         current.count += 1;
         grouped.set(key, current);
       }
@@ -372,7 +380,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         target: 'summary:' + item.to,
         kind: 'calls',
         label: item.count + ' connections',
-        explanation: (kindLabels[item.from] || item.from) + ' has ' + item.count + ' mapped connections to ' + (kindLabels[item.to] || item.to) + '.',
+        explanation: (kindLabels[item.from] || item.from) + ' and ' + (kindLabels[item.to] || item.to) + ' have ' + item.count + ' mapped connections.',
         confidence: 'exact',
         aggregate: true,
         location: null
@@ -394,13 +402,44 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         };
       }
       if (scope.type === 'overview') return overviewGraph();
-      if (scope.type === 'all') return { nodes: graph.nodes, edges: graph.edges, truncated: false };
+      if (scope.type === 'all') {
+        const limit = 400;
+        if (graph.nodes.length <= limit) return { nodes: graph.nodes, edges: graph.edges, truncated: false };
+        const seeds = graph.nodes.filter(node => node.kind === 'route').slice(0, 80).map(node => node.id);
+        if (!seeds.length) seeds.push(...graph.nodes.slice(0, 80).map(node => node.id));
+        const ids = connected(seeds, 2, limit);
+        for (const node of graph.nodes) {
+          if (ids.size >= limit) break;
+          ids.add(node.id);
+        }
+        return {
+          nodes: graph.nodes.filter(node => ids.has(node.id)),
+          edges: graph.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target)),
+          truncated: true
+        };
+      }
 
       let seeds = [];
       let depth = 1;
       let limit = 220;
       if (scope.type === 'kind') {
-        seeds = graph.nodes.filter(node => node.kind === scope.value).slice(0, limit).map(node => node.id);
+        const layerNodes = graph.nodes.filter(node => node.kind === scope.value);
+        const visibleNodes = layerNodes.slice(0, 120);
+        return {
+          nodes: visibleNodes,
+          edges: [],
+          truncated: layerNodes.length > visibleNodes.length
+        };
+      } else if (scope.type === 'node') {
+        const focused = graph.nodes.find(node => node.id === scope.value);
+        if (!focused) return { nodes: [], edges: [], truncated: false };
+        limit = 80;
+        const ids = connected([focused.id], 1, limit);
+        return {
+          nodes: graph.nodes.filter(node => ids.has(node.id)),
+          edges: graph.edges.filter(edge => edge.source === focused.id || edge.target === focused.id),
+          truncated: ids.size >= limit
+        };
       } else if (scope.type === 'module') {
         seeds = graph.nodes.filter(node => node.kind === 'route' && routeModule(node) === scope.value).map(node => node.id);
         depth = 4;
@@ -422,7 +461,9 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'nav-button ' + (className || '');
-      if (scopeKey(scope) === scopeKey(nextScope)) button.classList.add('active');
+      const focusedNode = scope.type === 'node' ? graph.nodes.find(node => node.id === scope.value) : null;
+      const isFocusedLayer = nextScope.type === 'kind' && focusedNode?.kind === nextScope.value;
+      if (scopeKey(scope) === scopeKey(nextScope) || isFocusedLayer) button.classList.add('active');
       button.title = label;
       button.append(text('span', label, 'nav-label'));
       if (count !== undefined) button.append(text('span', String(count), 'nav-count'));
@@ -468,7 +509,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
 
       const architecture = document.createElement('details');
       architecture.className = 'nav-section';
-      architecture.open = scope.type === 'kind';
+      architecture.open = scope.type === 'kind' || scope.type === 'node';
       architecture.append(text('summary', 'Architecture layers'));
       const kindCounts = new Map();
       for (const node of graph.nodes) kindCounts.set(node.kind, (kindCounts.get(node.kind) || 0) + 1);
@@ -493,14 +534,28 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         const from = positions.get(edge.source);
         const to = positions.get(edge.target);
         if (!from || !to) return;
-        const x1 = from.x + 172;
-        const y1 = from.y + 29;
-        const x2 = to.x;
-        const y2 = to.y + 29;
-        const bend = Math.max(32, Math.abs(x2 - x1) * .42);
-        const d = 'M ' + x1 + ' ' + y1 + ' C ' + (x1 + bend) + ' ' + y1 + ', ' + (x2 - bend) + ' ' + y2 + ', ' + x2 + ' ' + y2;
+        const nodeWidth = 172;
+        const nodeHeight = 58;
+        const fromCenter = { x: from.x + nodeWidth / 2, y: from.y + nodeHeight / 2 };
+        const toCenter = { x: to.x + nodeWidth / 2, y: to.y + nodeHeight / 2 };
+        const horizontal = Math.abs(toCenter.x - fromCenter.x) >= nodeWidth * .65;
+        let d;
+        if (horizontal) {
+          const direction = toCenter.x >= fromCenter.x ? 1 : -1;
+          const x1 = direction > 0 ? from.x + nodeWidth : from.x;
+          const x2 = direction > 0 ? to.x : to.x + nodeWidth;
+          const bend = Math.max(24, Math.abs(x2 - x1) * .42);
+          d = 'M ' + x1 + ' ' + fromCenter.y + ' C ' + (x1 + direction * bend) + ' ' + fromCenter.y + ', ' + (x2 - direction * bend) + ' ' + toCenter.y + ', ' + x2 + ' ' + toCenter.y;
+        } else {
+          const direction = toCenter.y >= fromCenter.y ? 1 : -1;
+          const y1 = direction > 0 ? from.y + nodeHeight : from.y;
+          const y2 = direction > 0 ? to.y : to.y + nodeHeight;
+          const bend = Math.max(18, Math.abs(y2 - y1) * .42);
+          d = 'M ' + fromCenter.x + ' ' + y1 + ' C ' + fromCenter.x + ' ' + (y1 + direction * bend) + ', ' + toCenter.x + ' ' + (y2 - direction * bend) + ', ' + toCenter.x + ' ' + y2;
+        }
         const group = document.createElementNS(svgNs, 'g');
         group.setAttribute('class', 'edge-group');
+        group.setAttribute('data-edge-id', edge.id);
         group.setAttribute('tabindex', '0');
         const visibleLine = document.createElementNS(svgNs, 'path');
         visibleLine.setAttribute('class', 'edge-visible');
@@ -577,15 +632,19 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       const columnWidth = 230;
       const rowHeight = 86;
       let maxRows = 1;
+      const compactColumns = scope.type !== 'overview' && scope.type !== 'all';
+      let renderedColumn = 0;
 
       layers.forEach((kinds, column) => {
         const group = visible.filter(node => kinds.includes(node.kind));
+        if (compactColumns && !group.length) return;
+        const layoutColumn = compactColumns ? renderedColumn++ : column;
         maxRows = Math.max(maxRows, group.length);
         const label = text('div', kinds.join(' / '), 'column-label');
-        label.style.left = (34 + column * columnWidth) + 'px';
+        label.style.left = (34 + layoutColumn * columnWidth) + 'px';
         nodesRoot.appendChild(label);
         group.forEach((node, row) => {
-          const automatic = { x: 34 + column * columnWidth, y: 54 + row * rowHeight };
+          const automatic = { x: 34 + layoutColumn * columnWidth, y: 54 + row * rowHeight };
           const custom = manualPositions.get(layoutKey(node.id));
           const x = custom?.x ?? automatic.x;
           const y = custom?.y ?? automatic.y;
@@ -615,10 +674,15 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         module: 'Module · ' + (scope.value || ''),
         route: graph.nodes.find(node => node.id === scope.value)?.label || 'Request flow',
         kind: kindLabels[scope.value] || scope.value,
+        node: 'Connections · ' + (graph.nodes.find(node => node.id === scope.value)?.label || 'Selected node'),
         all: 'All nodes'
       };
       scopeName.textContent = search.value.trim() ? 'Search results' : labels[scope.type];
-      scopeNote.textContent = current.truncated ? 'Result limited for readability' : visible.length + ' nodes · ' + current.edges.length + ' connections';
+      scopeNote.textContent = current.truncated
+        ? 'Result limited for readability'
+        : scope.type === 'kind' && !search.value.trim()
+          ? visible.length + ' nodes · select one to show direct connections'
+          : visible.length + ' nodes · ' + current.edges.length + ' connections';
       stats.textContent = visible.length + '/' + graph.nodes.length + ' nodes';
     }
 
@@ -631,7 +695,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     }
 
     function sourceButton(kind, id) {
-      const button = text('button', 'Open exact source line', 'tool-button source-button');
+      const button = text('button', 'Open source beside', 'tool-button source-button');
       button.type = 'button';
       button.addEventListener('click', () => vscode.postMessage({
         type: kind === 'node' ? 'openNode' : 'openEdge',
@@ -647,6 +711,10 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         renderTree();
         render();
         return;
+      }
+      if (scope.type === 'kind' || scope.type === 'node') {
+        scope = { type: 'node', value: node.id };
+        renderTree();
       }
       selected = node.id;
       render();

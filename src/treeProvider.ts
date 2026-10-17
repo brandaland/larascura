@@ -10,6 +10,7 @@ type TreeEntry =
 const labels: Partial<Record<NodeKind, string>> = {
   route: 'Routes',
   middleware: 'Middleware',
+  request: 'Form Requests',
   controller: 'Controllers',
   service: 'Services',
   repository: 'Repositories',
@@ -25,6 +26,7 @@ const labels: Partial<Record<NodeKind, string>> = {
 const icons: Record<NodeKind, string> = {
   route: 'git-merge',
   middleware: 'shield',
+  request: 'checklist',
   controller: 'symbol-method',
   service: 'tools',
   repository: 'database',

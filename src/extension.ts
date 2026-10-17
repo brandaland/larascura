@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { GraphPanel } from './graphPanel.js';
 import { explainSyntax } from './phpParser.js';
 import { ArchitectureTreeProvider } from './treeProvider.js';
-import { chooseLaravelRoot, LaravelScanner } from './scanner.js';
+import { chooseLaravelRoot, findLaravelRoots, LaravelScanner } from './scanner.js';
 import type { ArchitectureGraph, ArchitectureNode } from './types.js';
 
 let graph: ArchitectureGraph | undefined;
@@ -44,6 +44,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   status.tooltip = 'Open the local Laravel architecture map';
   status.show();
 
+  let watchedRoot: string | undefined;
+  const registerWatcher = (candidate: vscode.Uri): void => {
+    if (watchedRoot === candidate.fsPath) return;
+    if (!vscode.workspace.getConfiguration('larascura').get<boolean>('watchFiles', true)) return;
+    watchedRoot = candidate.fsPath;
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(candidate, '{app,routes}/**/*.php'),
+    );
+    const schedule = (): void => {
+      if (!graph) return;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        void scan().then((updated) => GraphPanel.updateIfOpen(updated)).catch(() => undefined);
+      }, 700);
+    };
+    watcher.onDidCreate(schedule, null, context.subscriptions);
+    watcher.onDidChange(schedule, null, context.subscriptions);
+    watcher.onDidDelete(schedule, null, context.subscriptions);
+    context.subscriptions.push(watcher);
+  };
+
   const scan = async (): Promise<ArchitectureGraph> => {
     if (!vscode.workspace.isTrusted) {
       throw new Error('Trust this workspace before LaraScura reads and analyzes its PHP source files.');
@@ -52,6 +73,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (!root) {
       throw new Error('No Laravel project root was found. Open a folder containing artisan and composer.json.');
     }
+    registerWatcher(root);
     status.text = '$(loading~spin) LaraScura scanning';
     try {
       graph = await scanner.scan(root);
@@ -110,24 +132,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
-  const folders = vscode.workspace.workspaceFolders;
-  if (folders?.length) {
-    root = await chooseLaravelRoot();
-    if (root && vscode.workspace.getConfiguration('larascura').get<boolean>('watchFiles', true)) {
-      const watcher = vscode.workspace.createFileSystemWatcher(
-        new vscode.RelativePattern(root, '{app,routes}/**/*.php'),
-      );
-      const schedule = (): void => {
-        if (!graph) return;
-        if (refreshTimer) clearTimeout(refreshTimer);
-        refreshTimer = setTimeout(() => {
-          void scan().then((updated) => GraphPanel.updateIfOpen(updated)).catch(() => undefined);
-        }, 700);
-      };
-      watcher.onDidCreate(schedule, null, context.subscriptions);
-      watcher.onDidChange(schedule, null, context.subscriptions);
-      watcher.onDidDelete(schedule, null, context.subscriptions);
-      context.subscriptions.push(watcher);
+  if (vscode.workspace.workspaceFolders?.length) {
+    const roots = await findLaravelRoots();
+    const onlyRoot = roots.length === 1 ? roots[0] : undefined;
+    if (onlyRoot) {
+      root = onlyRoot;
+      registerWatcher(root);
     }
   }
 }

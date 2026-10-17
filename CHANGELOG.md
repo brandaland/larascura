@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+- Mapped controller method injection: Form Requests appear as their own layer (`validates`), type-hinted models show route model binding (`resolves`), and services injected into actions or `handle()` are linked.
+- Connected listeners to events through `handle(Event $event)` type-hints (Laravel event discovery) and explicit `$listen` / `Event::listen` registrations.
+- Resolved middleware aliases from `bootstrap/app.php`, `app/Http/Kernel.php`, and Laravel's built-in aliases; `web` and `api` are explained as middleware groups and unknown aliases are reported as warnings.
+- Recognized class-based route middleware such as `->middleware(EnsureAdmin::class)`.
+- Read parameter lists with balanced-bracket scanning so nested defaults, attributes, nullable and union types no longer break dependency detection.
+- Added an end-to-end scanner test against a fixture Laravel project.
+
+## 0.2.3
+
+- Added natural search terms such as mind map, architecture map, diagram, schema, dependency graph, and request flow to improve Marketplace discovery.
+- Opened exact source locations beside the architecture map so the current visual context stays visible.
+- Simplified overview connections by merging reciprocal layer relationships and routing lines through the nearest node edges.
+- Made architecture-layer views progressive: layers start with their own nodes, then selecting one reveals only its direct relationships.
+
+## 0.2.2
+
+- Polished the extension icon for better visibility at Marketplace and sidebar sizes.
+- Ignored scalar constructor parameters instead of rendering them as class nodes.
+- Corrected source-line navigation for multiline constructor injection.
+- Added `Route::match`, `Route::resource`, and `Route::apiResource` parsing.
+- Applied common nested route-group prefixes and middleware to child routes.
+- Distinguished event-class dispatches from queued jobs and ignored dispatch facades.
+- Stopped ambiguous short class names from silently linking to the wrong class.
+- Deferred multi-root project selection until the user opens LaraScura.
+- Limited the advanced all-nodes view to keep very large projects responsive.
+- Kept multi-method routes such as `PUT|PATCH` in their real navigator module instead of a module named after the HTTP methods.
+- Documented the current static-analysis limitations in the README.
+- Marked the extension as a Marketplace preview while the scanner matures.
+
 ## 0.2.1
 
 - Fixed the architecture webview failing to start after the category-tree update.

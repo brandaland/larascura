@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { explainSyntax, parsePhpClass, parseRoutes } from '../src/phpParser.js';
+import { explainSyntax, parseMiddlewareAliases, parsePhpClass, parseRoutes } from '../src/phpParser.js';
 
 describe('Laravel PHP syntax parser', () => {
   it('maps route syntax to controller actions and middleware', () => {
@@ -48,6 +48,37 @@ describe('Laravel PHP syntax parser', () => {
     expect(parsed?.dependencies).toEqual([
       { type: 'App\\\\Services\\\\CreateOrderService', variable: 'orders', line: 8 },
     ]);
+  });
+
+  it('skips scalar constructor parameters and reports exact multiline source lines', () => {
+    const parsed = parsePhpClass('app/Services/Client.php', [
+      '<?php',
+      'namespace App\\Services;',
+      'class Client {',
+      '    public function __construct(',
+      '        private string $apiKey,',
+      '        private readonly Transport $transport,',
+      '        private int $retries = 3,',
+      '    ) {}',
+      '}',
+    ].join('\n'));
+
+    expect(parsed?.dependencies).toEqual([
+      { type: 'App\\Services\\Transport', variable: 'transport', line: 6 },
+    ]);
+  });
+
+  it('does not carry an abstract constructor into the next method body', () => {
+    const parsed = parsePhpClass('app/Services/AbstractClient.php', [
+      '<?php',
+      'namespace App\\Services;',
+      'abstract class AbstractClient {',
+      '    abstract public function __construct(Transport $transport);',
+      '    public function send(Payload $payload) {}',
+      '}',
+    ].join('\n'));
+
+    expect(parsed?.dependencies).toEqual([]);
   });
 
   it('extracts Eloquent relationships', () => {
@@ -104,6 +135,197 @@ describe('Laravel PHP syntax parser', () => {
         expect.objectContaining({ type: 'event', target: 'App\\\\Events\\\\InvoicePaid' }),
       ]),
     );
+  });
+
+  it('classifies event class dispatch separately from jobs', () => {
+    const parsed = parsePhpClass('app/Services/Billing.php', [
+      '<?php',
+      'namespace App\\Services;',
+      'use App\\Events\\InvoicePaid;',
+      'use App\\Jobs\\SendReceipt;',
+      'class Billing {',
+      '    public function finish() {',
+      '        InvoicePaid::dispatch();',
+      '        SendReceipt::dispatch();',
+      '        Bus::dispatch($job);',
+      '    }',
+      '}',
+    ].join('\n'));
+
+    expect(parsed?.dispatches).toEqual([
+      expect.objectContaining({ type: 'event', target: 'App\\Events\\InvoicePaid' }),
+      expect.objectContaining({ type: 'job', target: 'App\\Jobs\\SendReceipt' }),
+    ]);
+  });
+
+  it('parses match and resource routes with inherited group context', () => {
+    const routes = parseRoutes([
+      '<?php',
+      'use App\\Http\\Controllers\\OrderController;',
+      "Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {",
+      "    Route::match(['get', 'post'], '/preview', [OrderController::class, 'preview']);",
+      "    Route::resource('orders', OrderController::class)->only(['index', 'show']);",
+      '});',
+    ].join('\n'));
+
+    expect(routes).toEqual([
+      {
+        method: 'GET|POST',
+        uri: '/admin/preview',
+        controller: 'App\\Http\\Controllers\\OrderController',
+        action: 'preview',
+        middleware: ['auth', 'verified'],
+        line: 4,
+      },
+      {
+        method: 'GET',
+        uri: '/admin/orders',
+        controller: 'App\\Http\\Controllers\\OrderController',
+        action: 'index',
+        middleware: ['auth', 'verified'],
+        line: 5,
+      },
+      {
+        method: 'GET',
+        uri: '/admin/orders/{order}',
+        controller: 'App\\Http\\Controllers\\OrderController',
+        action: 'show',
+        middleware: ['auth', 'verified'],
+        line: 5,
+      },
+    ]);
+  });
+
+  it('extracts controller method injection, form requests, and route model binding types', () => {
+    const parsed = parsePhpClass('app/Http/Controllers/PostController.php', [
+      '<?php',
+      'namespace App\\Http\\Controllers;',
+      'use App\\Http\\Requests\\StorePostRequest;',
+      'use App\\Models\\Post;',
+      'use App\\Services\\Publisher;',
+      'use Illuminate\\Http\\Request;',
+      'class PostController extends Controller {',
+      '    public function store(StorePostRequest $request, Publisher $publisher): RedirectResponse',
+      '    {',
+      '    }',
+      '    public function show(',
+      '        #[CurrentUser] ?Post $post,',
+      '        array $options = [\'a\' => [1, 2]],',
+      '    ) {}',
+      '    protected function helper(Publisher $publisher) {}',
+      '    public static function make(Publisher $publisher) {}',
+      '}',
+    ].join('\n'));
+
+    expect(parsed?.dependencies).toEqual([]);
+    expect(parsed?.methodDependencies).toEqual([
+      { method: 'store', type: 'App\\Http\\Requests\\StorePostRequest', variable: 'request', line: 8 },
+      { method: 'store', type: 'App\\Services\\Publisher', variable: 'publisher', line: 8 },
+      { method: 'show', type: 'App\\Models\\Post', variable: 'post', line: 12 },
+    ]);
+  });
+
+  it('classifies form requests and middleware by convention', () => {
+    expect(parsePhpClass('app/Http/Requests/StorePostRequest.php', [
+      '<?php', 'namespace App\\Http\\Requests;', 'class StorePostRequest extends FormRequest {}',
+    ].join('\n'))?.kind).toBe('request');
+    expect(parsePhpClass('app/Http/Middleware/EnsureAdmin.php', [
+      '<?php', 'namespace App\\Http\\Middleware;', 'class EnsureAdmin {}',
+    ].join('\n'))?.kind).toBe('middleware');
+  });
+
+  it('reads constructor parameters with nested defaults and union types', () => {
+    const parsed = parsePhpClass('app/Services/Mailer.php', [
+      '<?php',
+      'namespace App\\Services;',
+      'class Mailer {',
+      '    public function __construct(',
+      "        private array $headers = ['x' => ['y']],",
+      '        private Transport|Fallback $transport = new Transport(),',
+      '    ) {}',
+      '}',
+    ].join('\n'));
+
+    expect(parsed?.dependencies).toEqual([
+      { type: 'App\\Services\\Transport', variable: 'transport', line: 6 },
+      { type: 'App\\Services\\Fallback', variable: 'transport', line: 6 },
+    ]);
+  });
+
+  it('extracts listener handle() event type-hints and explicit listener registrations', () => {
+    const listener = parsePhpClass('app/Listeners/SendShipmentNotification.php', [
+      '<?php',
+      'namespace App\\Listeners;',
+      'use App\\Events\\OrderShipped;',
+      'class SendShipmentNotification {',
+      '    public function handle(OrderShipped $event): void {}',
+      '}',
+    ].join('\n'));
+    expect(listener?.methodDependencies).toEqual([
+      { method: 'handle', type: 'App\\Events\\OrderShipped', variable: 'event', line: 5 },
+    ]);
+
+    const provider = parsePhpClass('app/Providers/EventServiceProvider.php', [
+      '<?php',
+      'namespace App\\Providers;',
+      'use App\\Events\\OrderShipped;',
+      'use App\\Listeners\\SendShipmentNotification;',
+      'use App\\Listeners\\UpdateStock;',
+      'class EventServiceProvider {',
+      '    protected $listen = [',
+      '        OrderShipped::class => [',
+      '            SendShipmentNotification::class,',
+      '            UpdateStock::class,',
+      '        ],',
+      '    ];',
+      '    public function boot(): void {',
+      "        Event::listen(OrderShipped::class, [AuditLog::class, 'handle']);",
+      '    }',
+      '}',
+    ].join('\n'));
+    expect(provider?.listeners).toEqual([
+      { event: 'App\\Events\\OrderShipped', listener: 'App\\Listeners\\SendShipmentNotification', line: 9 },
+      { event: 'App\\Events\\OrderShipped', listener: 'App\\Listeners\\UpdateStock', line: 10 },
+      { event: 'App\\Events\\OrderShipped', listener: 'App\\Providers\\AuditLog', line: 14 },
+    ]);
+  });
+
+  it('reads middleware aliases from bootstrap/app.php and the HTTP kernel', () => {
+    expect(parseMiddlewareAliases([
+      '<?php',
+      'use App\\Http\\Middleware\\EnsureAdmin;',
+      'return Application::configure(basePath: dirname(__DIR__))',
+      '    ->withMiddleware(function (Middleware $middleware) {',
+      '        $middleware->alias([',
+      "            'admin' => EnsureAdmin::class,",
+      '        ]);',
+      '    })->create();',
+    ].join('\n'))).toEqual([{ alias: 'admin', target: 'App\\Http\\Middleware\\EnsureAdmin', line: 6 }]);
+
+    expect(parseMiddlewareAliases([
+      '<?php',
+      'namespace App\\Http;',
+      'class Kernel extends HttpKernel {',
+      '    protected $middlewareAliases = [',
+      "        'auth' => \\App\\Http\\Middleware\\Authenticate::class,",
+      "        'role' => '\\Spatie\\Permission\\Middleware\\RoleMiddleware',",
+      '    ];',
+      '}',
+    ].join('\n'))).toEqual([
+      { alias: 'auth', target: 'App\\Http\\Middleware\\Authenticate', line: 5 },
+      { alias: 'role', target: 'Spatie\\Permission\\Middleware\\RoleMiddleware', line: 6 },
+    ]);
+  });
+
+  it('resolves class-based route middleware', () => {
+    const routes = parseRoutes([
+      '<?php',
+      'use App\\Http\\Middleware\\EnsureAdmin;',
+      "Route::middleware([EnsureAdmin::class, 'throttle:api'])->group(function () {",
+      "    Route::get('/panel', PanelController::class)->middleware(EnsureAdmin::class.':strict');",
+      '});',
+    ].join('\n'));
+    expect(routes[0]?.middleware).toEqual(['App\\Http\\Middleware\\EnsureAdmin', 'throttle:api']);
   });
 
   it('explains common Laravel syntax without a network service', () => {
