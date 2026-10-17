@@ -364,6 +364,38 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       return included;
     }
 
+    // A request flow follows edges forward (route → middleware/controller → service → event).
+    // 'listens' points from listener to event, so it is followed backwards to reach the listener.
+    // Walking edges in both directions would hop through shared middleware into unrelated routes.
+    function flowReachable(seedIds, depth, limit) {
+      const included = new Set(seedIds);
+      let frontier = new Set(seedIds);
+      // Only the actions these routes call: method-level edges are labelled 'action()' or 'action($param)'.
+      const actions = new Map();
+      for (const edge of graph.edges) {
+        if (edge.kind !== 'handles' || !included.has(edge.source)) continue;
+        actions.set(edge.target, (actions.get(edge.target) || new Set()).add(edge.label));
+      }
+      const otherAction = edge => {
+        const method = /^(\\w+)\\(/.exec(edge.label);
+        return Boolean(method && actions.has(edge.source) && !actions.get(edge.source).has(method[1]));
+      };
+      for (let level = 0; level < depth && frontier.size && included.size < limit; level++) {
+        const next = new Set();
+        for (const edge of graph.edges) {
+          if (otherAction(edge)) continue;
+          const forward = edge.kind !== 'listens' && frontier.has(edge.source) ? edge.target : null;
+          const backward = edge.kind === 'listens' && frontier.has(edge.target) ? edge.source : null;
+          const neighbor = forward || backward;
+          if (neighbor && !included.has(neighbor)) next.add(neighbor);
+          if (included.size + next.size >= limit) break;
+        }
+        for (const id of next) included.add(id);
+        frontier = next;
+      }
+      return included;
+    }
+
     function overviewGraph() {
       const counts = new Map();
       for (const node of graph.nodes) counts.set(node.kind, (counts.get(node.kind) || 0) + 1);
@@ -468,7 +500,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         depth = 5;
         limit = 120;
       }
-      const ids = connected(seeds, depth, limit);
+      const ids = flowReachable(seeds, depth, limit);
       return {
         nodes: graph.nodes.filter(node => ids.has(node.id)),
         edges: graph.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target)),

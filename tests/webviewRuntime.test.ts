@@ -306,4 +306,70 @@ describe('LaraScura architecture webview', () => {
 
     dom.window.close();
   });
+
+  it('keeps a request flow on its own route instead of hopping through shared middleware', async () => {
+    const errors: string[] = [];
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on('jsdomError', (error) => errors.push(error.message));
+    const dom = new JSDOM(createGraphHtml('test-nonce'), {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      virtualConsole,
+      beforeParse(window) {
+        Object.assign(window, {
+          acquireVsCodeApi: () => ({ postMessage: () => undefined, getState: () => undefined, setState: () => undefined }),
+        });
+      },
+    });
+    const location = { file: '/workspace/example/app/File.php', line: 1 };
+    const node = (id: string, label: string, kind: ArchitectureGraph['nodes'][number]['kind']) =>
+      ({ id, label, kind, location, summary: '', syntax: '' });
+    const edge = (source: string, target: string, kind: ArchitectureGraph['edges'][number]['kind'], label: string) =>
+      ({ id: `${kind}:${source}->${target}`, source, target, kind, label, location, explanation: '', confidence: 'exact' as const });
+    const graph: ArchitectureGraph = {
+      projectName: 'example/app',
+      root: '/workspace/example',
+      sourceDirectories: ['app', 'routes'],
+      generatedAt: new Date(0).toISOString(),
+      warnings: [],
+      nodes: [
+        node('route:delete', 'POST /account/delete', 'route'),
+        node('route:cart', 'GET /cart', 'route'),
+        node('mw:auth', 'auth', 'middleware'),
+        node('ctrl', 'AccountController', 'controller'),
+        node('req:delete', 'DeleteAccountRequest', 'request'),
+        node('req:cart', 'CartRequest', 'request'),
+        node('svc', 'AccountService', 'service'),
+        node('event', 'AccountDeleted', 'event'),
+        node('listener', 'SendGoodbyeMail', 'listener'),
+      ],
+      edges: [
+        edge('route:delete', 'mw:auth', 'middleware', 'auth'),
+        edge('route:cart', 'mw:auth', 'middleware', 'auth'),
+        edge('route:delete', 'ctrl', 'handles', 'delete'),
+        edge('route:cart', 'ctrl', 'handles', 'cart'),
+        edge('ctrl', 'req:delete', 'validates', 'delete()'),
+        edge('ctrl', 'req:cart', 'validates', 'cart()'),
+        edge('ctrl', 'svc', 'injects', 'injects'),
+        edge('svc', 'event', 'fires', 'fires'),
+        edge('listener', 'event', 'listens', 'listens'),
+      ],
+    };
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph } }));
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'focus', nodeId: 'route:delete' } }));
+    const shown = [...dom.window.document.querySelectorAll('.node-label')].map((label) => label.textContent).sort();
+
+    expect(shown).toEqual([
+      'AccountController',
+      'AccountDeleted',
+      'AccountService',
+      'DeleteAccountRequest',
+      'POST /account/delete',
+      'SendGoodbyeMail',
+      'auth',
+    ]);
+    expect(errors).toEqual([]);
+    dom.window.close();
+  });
 });
