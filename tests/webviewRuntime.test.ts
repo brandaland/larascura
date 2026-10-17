@@ -33,6 +33,7 @@ describe('LaraScura architecture webview', () => {
     const graph: ArchitectureGraph = {
       projectName: 'example/app',
       root: '/workspace/example',
+      sourceDirectories: ['app', 'routes'],
       generatedAt: new Date(0).toISOString(),
       warnings: [],
       nodes: [
@@ -106,6 +107,19 @@ describe('LaraScura architecture webview', () => {
     sourceButton?.click();
     expect(messages).toContainEqual({ type: 'openNode', nodeId: 'controller:orders' });
 
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'focus', nodeId: 'route:orders' },
+    }));
+    expect(dom.window.document.querySelector('#scopeName')?.textContent).toBe('GET /orders');
+    expect(dom.window.document.querySelector('#detailTitle')?.textContent).toBe('GET /orders');
+    expect(dom.window.document.querySelector('.node.active')?.textContent).toContain('GET /orders');
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'focus', nodeId: 'controller:orders' },
+    }));
+    expect(dom.window.document.querySelector('#scopeName')?.textContent).toBe('Connections · OrderController');
+    expect(errors).toEqual([]);
+
     dom.window.close();
   });
 
@@ -136,6 +150,7 @@ describe('LaraScura architecture webview', () => {
     const graph: ArchitectureGraph = {
       projectName: 'example/app',
       root: '/workspace/example',
+      sourceDirectories: ['app', 'routes'],
       generatedAt: new Date(0).toISOString(),
       warnings: [],
       edges: [],
@@ -182,6 +197,7 @@ describe('LaraScura architecture webview', () => {
     const graph: ArchitectureGraph = {
       projectName: 'example/app',
       root: '/workspace/example',
+      sourceDirectories: ['app', 'routes'],
       generatedAt: new Date(0).toISOString(),
       warnings: [],
       nodes: [node('controller', 'controller'), node('service', 'service')],
@@ -244,6 +260,7 @@ describe('LaraScura architecture webview', () => {
     const graph: ArchitectureGraph = {
       projectName: 'example/app',
       root: '/workspace/example',
+      sourceDirectories: ['app', 'routes'],
       generatedAt: new Date(0).toISOString(),
       warnings: [],
       nodes: [

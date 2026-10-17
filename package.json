@@ -2,7 +2,7 @@
   "name": "larascura",
   "displayName": "LaraScura",
   "description": "Visualize Laravel architecture, follow request flows, and understand the syntax.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "ooll",
   "author": {
     "name": "Ozkan A."
@@ -78,6 +78,15 @@
       {
         "command": "larascura.openNode",
         "title": "LaraScura: Open Source"
+      },
+      {
+        "command": "larascura.revealInMap",
+        "title": "LaraScura: Reveal in Architecture Map",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "larascura.openMethod",
+        "title": "LaraScura: Open Controller Method"
       }
     ],
     "viewsContainers": {
@@ -115,6 +124,25 @@
           "command": "larascura.explainSelection",
           "when": "editorLangId == php && isWorkspaceTrusted",
           "group": "navigation"
+        },
+        {
+          "command": "larascura.revealInMap",
+          "when": "editorLangId == php && isWorkspaceTrusted",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "larascura.openMethod",
+          "when": "false"
+        },
+        {
+          "command": "larascura.openNode",
+          "when": "false"
+        },
+        {
+          "command": "larascura.revealInMap",
+          "when": "editorLangId == php"
         }
       ]
     },
@@ -140,6 +168,11 @@
           "type": "boolean",
           "default": true,
           "description": "Classify repository classes as their own architecture layer."
+        },
+        "larascura.codeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show routes, middleware, and connection counts above Laravel routes, controller actions, and classes."
         }
       }
     }

@@ -11,21 +11,37 @@ export class GraphPanel {
   private readonly panel: vscode.WebviewPanel;
   private graph: ArchitectureGraph;
   private readonly onRefresh: () => Promise<ArchitectureGraph>;
+  private ready = false;
+  private pendingFocus: string | undefined;
 
   public static show(
     context: vscode.ExtensionContext,
     graph: ArchitectureGraph,
     onRefresh: () => Promise<ArchitectureGraph>,
+    focusNodeId?: string,
   ): GraphPanel {
     if (GraphPanel.current) {
       GraphPanel.current.graph = graph;
+      // A hidden webview reloads on reveal and announces itself again with 'ready'.
+      if (!GraphPanel.current.panel.visible) GraphPanel.current.ready = false;
       GraphPanel.current.panel.reveal(vscode.ViewColumn.One);
       GraphPanel.current.postGraph();
+      if (focusNodeId) GraphPanel.current.focus(focusNodeId);
       return GraphPanel.current;
     }
 
     GraphPanel.current = new GraphPanel(context, graph, onRefresh);
+    if (focusNodeId) GraphPanel.current.focus(focusNodeId);
     return GraphPanel.current;
+  }
+
+  /** Focuses a node once the webview has its graph; earlier requests wait for the ready message. */
+  public focus(nodeId: string): void {
+    if (!this.ready) {
+      this.pendingFocus = nodeId;
+      return;
+    }
+    void this.panel.webview.postMessage({ type: 'focus', nodeId });
   }
 
   public static updateIfOpen(graph: ArchitectureGraph): boolean {
@@ -58,7 +74,10 @@ export class GraphPanel {
     this.panel.webview.onDidReceiveMessage(
       async (message: { type?: string; nodeId?: string; edgeId?: string }) => {
         if (message.type === 'ready') {
+          this.ready = true;
           this.postGraph();
+          if (this.pendingFocus) this.focus(this.pendingFocus);
+          this.pendingFocus = undefined;
           return;
         }
         if (message.type === 'refresh') {
@@ -757,7 +776,20 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       detailContent.append(...content);
     }
 
+    function focusNode(nodeId) {
+      const node = graph?.nodes.find(candidate => candidate.id === nodeId);
+      if (!node) return;
+      search.value = '';
+      scope = node.kind === 'route' ? { type: 'route', value: node.id } : { type: 'node', value: node.id };
+      renderTree();
+      showNode(node);
+    }
+
     window.addEventListener('message', event => {
+      if (event.data?.type === 'focus') {
+        focusNode(event.data.nodeId);
+        return;
+      }
       if (event.data?.type !== 'graph') return;
       graph = event.data.graph;
       document.title = 'LaraScura — ' + graph.projectName;

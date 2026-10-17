@@ -40,6 +40,8 @@ export interface ArchitectureNode {
   location: SourceLocation;
   summary: string;
   syntax: string;
+  /** True when the node was only referenced; its location points at the reference, not a definition. */
+  external?: boolean;
 }
 
 export interface ArchitectureEdge {
@@ -56,6 +58,7 @@ export interface ArchitectureEdge {
 export interface ArchitectureGraph {
   projectName: string;
   root: string;
+  sourceDirectories: string[];
   generatedAt: string;
   nodes: ArchitectureNode[];
   edges: ArchitectureEdge[];

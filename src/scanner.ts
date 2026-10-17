@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ambiguousClassNames, createClassNameIndex, resolveClassName } from './classResolver.js';
 import { kindSummary, parseMiddlewareAliases, parsePhpClass, parseRoutes } from './phpParser.js';
+import { isRouteFile, phpGlob, sourceDirectories } from './projectLayout.js';
 import type {
   ArchitectureEdge,
   ArchitectureGraph,
@@ -128,14 +129,31 @@ export const chooseLaravelRoot = async (): Promise<vscode.Uri | undefined> => {
   return choice?.root;
 };
 
+export const scanDirectories = async (root: vscode.Uri): Promise<string[]> => {
+  let composer: string | undefined;
+  try {
+    composer = decode(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, 'composer.json')));
+  } catch {
+    composer = undefined;
+  }
+  let hasModules = false;
+  try {
+    hasModules = (await vscode.workspace.fs.stat(vscode.Uri.joinPath(root, 'Modules'))).type === vscode.FileType.Directory;
+  } catch {
+    hasModules = false;
+  }
+  return sourceDirectories(composer, hasModules);
+};
+
 export class LaravelScanner {
   public async scan(root: vscode.Uri, token?: vscode.CancellationToken): Promise<ArchitectureGraph> {
     const lang = language();
     const includeRepositories = vscode.workspace
       .getConfiguration('larascura')
       .get<boolean>('includeRepositories', true);
+    const directories = await scanDirectories(root);
     const files = await vscode.workspace.findFiles(
-      new vscode.RelativePattern(root, '{app,routes}/**/*.php'),
+      new vscode.RelativePattern(root, phpGlob(directories)),
       new vscode.RelativePattern(root, '{vendor,storage,bootstrap/cache,node_modules}/**'),
       10000,
       token,
@@ -167,7 +185,7 @@ export class LaravelScanner {
       if (token?.isCancellationRequested) throw new vscode.CancellationError();
       const source = decode(await vscode.workspace.fs.readFile(uri));
       const relative = normalize(path.relative(root.fsPath, uri.fsPath));
-      if (relative.startsWith('routes/')) routeFiles.push({ file: uri.fsPath, source });
+      if (isRouteFile(relative)) routeFiles.push({ file: uri.fsPath, source });
 
       collectMiddlewareAliases(uri.fsPath, source);
       const parsed = parsePhpClass(relative, source);
@@ -219,8 +237,9 @@ export class LaravelScanner {
         location,
         summary: kindSummary(kind, lang),
         syntax: lang === 'tr'
-          ? 'Bu sınıfa referans bulundu ancak sınıf dosyası taranan app/ dizininde çözülemedi.'
-          : 'A reference was found, but the class file was not resolved inside the scanned app/ directory.',
+          ? 'Bu sınıfa referans bulundu ancak sınıf dosyası taranan dizinlerde çözülemedi.'
+          : 'A reference was found, but the class file was not resolved inside the scanned directories.',
+        external: true,
       };
       nodes.set(created.id, created);
       return created;
@@ -319,6 +338,7 @@ export class LaravelScanner {
           qualifiedName: registered.target,
           kind: 'middleware',
           location: registered.location ?? routeLocation,
+          external: true,
           summary: kindSummary('middleware', lang),
           syntax: isFramework
             ? lang === 'tr'
@@ -342,6 +362,7 @@ export class LaravelScanner {
         label: alias,
         kind: 'middleware',
         location: routeLocation,
+        external: true,
         summary: kindSummary('middleware', lang),
         syntax: isGroup
           ? lang === 'tr'
@@ -402,6 +423,7 @@ export class LaravelScanner {
     return {
       projectName,
       root: root.fsPath,
+      sourceDirectories: directories,
       generatedAt: new Date().toISOString(),
       nodes: [...nodes.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label)),
       edges: [...edges.values()],

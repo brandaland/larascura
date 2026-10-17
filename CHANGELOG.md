@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- Added CodeLens: routes show the controller action that handles them, controller actions show every route and middleware that reaches them, and each class shows its connection count.
+- Added **LaraScura: Reveal in Architecture Map** (editor context menu and Command Palette) to focus the map on the route under the cursor or the class in the current file.
+- Scanned every PSR-4 autoload directory from `composer.json` and the `Modules/` folder, so domain folders and modular projects are mapped; factories, seeders, and tests stay out of the map.
+- Recognized route files inside modules, such as `Modules/Blog/routes/web.php`.
+- Built the graph quietly in the background on startup so CodeLens works before the map is opened. Turn CodeLens off with `larascura.codeLens`.
+
 ## 0.3.0
 
 - Mapped controller method injection: Form Requests appear as their own layer (`validates`), type-hinted models show route model binding (`resolves`), and services injected into actions or `handle()` are linked.

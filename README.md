@@ -27,8 +27,10 @@ LaraScura was created for people who understand systems better through flows and
 - Maps service-container bindings
 - Classifies controllers, services, repositories, models, jobs, events, listeners, providers, and commands
 - Opens the exact source line from every node and connection
+- Shows CodeLens above routes, controller actions, and classes, and reveals the current file in the map
+- Scans PSR-4 autoload directories and `Modules/`, not only `app/`
 - Explains Laravel concepts in English or Turkish
-- Watches `app/` and `routes/` for changes
+- Watches every scanned directory for changes
 - Packages as a normal installable VSIX
 - Starts with a compact architecture overview instead of a full-graph hairball
 - Navigates through request-flow modules, individual routes, and architecture layers
@@ -77,7 +79,7 @@ Marketplace identifier: `ooll.larascura`
 
 ~~~bash
 npm run package:vsix
-code --install-extension larascura-0.3.0.vsix
+code --install-extension larascura-0.4.0.vsix
 ~~~
 
 ## Static-analysis boundaries
