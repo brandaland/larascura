@@ -1,7 +1,8 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ambiguousClassNames, createClassNameIndex, resolveClassName } from './classResolver.js';
-import { kindSummary, parseMiddlewareAliases, parsePhpClass, parseRoutes } from './phpParser.js';
+import { inertiaRenders, pageDirectoryFrom, sharedProps, vuePageProps, type PageProps } from './inertia.js';
+import { kindSummary, lineNumber, parseMiddlewareAliases, parsePhpClass, parseRoutes } from './phpParser.js';
 import { diagnose, linkRouteFindings } from './doctor.js';
 import { isRouteFile, phpGlob, sourceDirectories } from './projectLayout.js';
 import type {
@@ -79,6 +80,9 @@ const edgeExplanation = (
     resolves: tr
       ? `Route model binding: Laravel URL'deki {${detail}} parametresiyle veritabanından ${target} kaydını bulup metoda verir. Kayıt yoksa otomatik 404 döner.`
       : `Route model binding: Laravel uses the {${detail}} URL parameter to load a ${target} record and passes it to the method. A missing record returns a 404 automatically.`,
+    renders: tr
+      ? `${source}, ${target} Inertia sayfasını döndürür. Inertia ${detail} verisini JSON olarak gönderir ve sayfa tarayıcıda Vue/React ile çizilir.`
+      : `${source} returns the ${target} Inertia page. Inertia sends ${detail} as JSON props and the page is rendered in the browser.`,
     calls: tr ? `${source}, ${target} sınıfını kullanır.` : `${source} uses ${target}.`,
     dispatches: tr
       ? `${source}, ${target} job’ını dispatch eder; iş queue yapılandırmasına göre yürütülür.`
@@ -170,6 +174,41 @@ const viewNamesOf = async (root: vscode.Uri, token?: vscode.CancellationToken): 
     .slice(viewsRoot.length + 1)
     .replace(/(\.blade)?\.php$/, '')
     .replaceAll('/', '.')));
+};
+
+/**
+ * Inertia pages keyed by the name controllers pass to Inertia::render ('Users/Index'). The folder comes
+ * from import.meta.glob in the app entry, falling back to resources/js/Pages or resources/js/pages.
+ */
+const inertiaPagesOf = async (root: vscode.Uri, token?: vscode.CancellationToken): Promise<{
+  known: boolean;
+  pages: Map<string, { file: string; props?: PageProps }>;
+}> => {
+  const pages = new Map<string, { file: string; props?: PageProps }>();
+  let directory: { directory: string; extension: string } | undefined;
+  const entries = await vscode.workspace.findFiles(new vscode.RelativePattern(root, 'resources/js/*.{js,ts}'), undefined, 50, token);
+  for (const entry of entries) {
+    directory ??= pageDirectoryFrom(decode(await vscode.workspace.fs.readFile(entry)));
+  }
+  const candidates = directory ? [directory.directory] : ['Pages', 'pages'];
+  for (const candidate of candidates) {
+    try {
+      const stat = await vscode.workspace.fs.stat(vscode.Uri.joinPath(root, 'resources', 'js', candidate));
+      if (stat.type !== vscode.FileType.Directory) continue;
+    } catch {
+      continue;
+    }
+    const extensions = directory ? directory.extension : '{vue,tsx,jsx,svelte}';
+    const files = await vscode.workspace.findFiles(new vscode.RelativePattern(root, `resources/js/${candidate}/**/*.${extensions}`), undefined, 5000, token);
+    const base = normalize(path.join(root.fsPath, 'resources', 'js', candidate));
+    for (const uri of files) {
+      const name = normalize(uri.fsPath).slice(base.length + 1).replace(/\.(vue|tsx|jsx|svelte)$/, '');
+      const props = uri.fsPath.endsWith('.vue') ? vuePageProps(decode(await vscode.workspace.fs.readFile(uri))) : undefined;
+      pages.set(name, { file: uri.fsPath, props });
+    }
+    return { known: true, pages };
+  }
+  return { known: false, pages };
 };
 
 export class LaravelScanner {
@@ -274,6 +313,62 @@ export class LaravelScanner {
       return created;
     };
 
+    const inertia = await inertiaPagesOf(root, token);
+    const sharedInertiaProps = [...classes.values()]
+      .map(({ source }) => (/Inertia/.test(source) ? sharedProps(source) : undefined))
+      .find((shared) => shared !== undefined);
+    const inertiaCalls: Array<{ file: string; line: number; page: string; props?: string[] }> = [];
+    const pageSyntax = (props?: PageProps): string => {
+      if (!props) {
+        return lang === 'tr'
+          ? 'Bu sayfanın props tanımı statik olarak okunamadı (React/Svelte sayfası ya da dışarıdan import edilen bir tip olabilir).'
+          : 'This page\'s props could not be read statically (it may be a React or Svelte page, or use an imported type).';
+      }
+      const list = props.props.map((prop) => `${prop.name}${prop.required ? '' : '?'}`).join(', ') || '—';
+      return lang === 'tr' ? `defineProps ile tanımlanan props: ${list}` : `Props declared with defineProps: ${list}`;
+    };
+    const pageNode = (name: string, location: SourceLocation): ArchitectureNode => {
+      const id = nodeId('page', name);
+      const existing = nodes.get(id);
+      if (existing) return existing;
+      const known = inertia.pages.get(name);
+      if (known) {
+        const node: ArchitectureNode = {
+          id, label: name, kind: 'page', location: { file: known.file, line: known.props?.line ?? 1 },
+          summary: kindSummary('page', lang), syntax: pageSyntax(known.props), props: known.props?.props,
+        };
+        nodes.set(id, node);
+        return node;
+      }
+      const created: ArchitectureNode = {
+        id,
+        label: name,
+        kind: 'page',
+        location,
+        summary: kindSummary('page', lang),
+        syntax: lang === 'tr'
+          ? `Inertia bu sayfayı arıyor ama resources/js altında "${name}" adlı bir sayfa dosyası bulunamadı.`
+          : `Inertia asks for this page, but no "${name}" page file was found under resources/js.`,
+        external: true,
+      };
+      nodes.set(id, created);
+      return created;
+    };
+    for (const [name, page] of inertia.pages) {
+      // Child components kept under Pages/ (components, partials, layouts) are not pages; they get a node
+      // only if something renders them.
+      if (/(^|\/)(components|partials|layouts|shared|composables|ui)\//i.test(name)) continue;
+      nodes.set(nodeId('page', name), {
+        id: nodeId('page', name),
+        label: name,
+        kind: 'page',
+        location: { file: page.file, line: page.props?.line ?? 1 },
+        summary: kindSummary('page', lang),
+        syntax: pageSyntax(page.props),
+        props: page.props?.props,
+      });
+    }
+
     const edges = new Map<string, ArchitectureEdge>();
     const addEdge = (
       sourceNode: ArchitectureNode,
@@ -330,6 +425,17 @@ export class LaravelScanner {
           (edge) => edge.kind === 'listens' && edge.source === listener.id && edge.target === event.id,
         );
         if (!alreadyLinked) addEdge(listener, event, 'listens', 'listens', location, 'registered');
+      }
+      if (/inertia/i.test(source)) {
+        const declarations = [...source.matchAll(/function\s+(\w+)\s*\(/g)]
+          .map((match) => ({ name: match[1] ?? '', line: lineNumber(source, match.index ?? 0) }));
+        for (const render of inertiaRenders(source)) {
+          const method = declarations.filter((declaration) => declaration.line <= render.line).at(-1)?.name;
+          const location = { file, line: render.line, preview: linePreview(source, render.line) };
+          addEdge(owner, pageNode(render.page, location), 'renders', method ? `${method}()` : 'renders', location,
+            render.props?.length ? render.props.join(', ') : 'its props');
+          inertiaCalls.push({ file, line: render.line, page: render.page, props: render.props });
+        }
       }
       for (const relation of parsed.relations) {
         if (relation.target === 'polymorphic model') continue;
@@ -413,6 +519,7 @@ export class LaravelScanner {
     for (const routeFile of routeFiles) {
       const routes = parseRoutes(routeFile.source);
       parsedRouteFiles.push({ ...routeFile, routes });
+      const closureRoutes: Array<{ line: number; node: ArchitectureNode }> = [];
       for (const route of routes) {
         const routeLabel = `${route.method} /${route.uri.replace(/^\//, '')}`;
         const routeLocation = {
@@ -452,6 +559,22 @@ export class LaravelScanner {
           const middleware = resolveMiddleware(middlewareName, routeLocation);
           addEdge(routeNode, middleware, 'middleware', middlewareName, routeLocation, middlewareName);
         }
+        if (route.page) {
+          addEdge(routeNode, pageNode(route.page, routeLocation), 'renders', 'renders', routeLocation,
+            route.pageProps?.length ? route.pageProps.join(', ') : 'its props');
+          inertiaCalls.push({ file: routeFile.file, line: route.line, page: route.page, props: route.pageProps });
+        }
+        if (route.closure) closureRoutes.push({ line: route.line, node: routeNode });
+      }
+
+      // inertia('Page') inside a route closure belongs to the closest closure route above it.
+      for (const render of /inertia/i.test(routeFile.source) ? inertiaRenders(routeFile.source) : []) {
+        const owner = closureRoutes.filter((candidate) => candidate.line <= render.line).at(-1);
+        if (!owner) continue;
+        const location = { file: routeFile.file, line: render.line, preview: linePreview(routeFile.source, render.line) };
+        addEdge(owner.node, pageNode(render.page, location), 'renders', 'renders', location,
+          render.props?.length ? render.props.join(', ') : 'its props');
+        inertiaCalls.push({ file: routeFile.file, line: render.line, page: render.page, props: render.props });
       }
     }
 
@@ -479,6 +602,13 @@ export class LaravelScanner {
         knownMiddleware: new Set([...middlewareAliases.keys(), ...middlewareGroups]),
         unresolvedMiddleware,
         viewNames: await viewNamesOf(root, token),
+        inertia: {
+          pagesKnown: inertia.known,
+          pages: inertia.pages,
+          // Without a custom HandleInertiaRequests, Inertia shares only validation errors.
+          shared: sharedInertiaProps ?? { keys: ['errors'], complete: true },
+          renders: inertiaCalls,
+        },
       })
       : [];
     if (findings.some((finding) => finding.route)) {

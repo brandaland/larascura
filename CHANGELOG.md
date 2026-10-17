@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0
+
+- **Inertia + Vue support.** Inertia pages appear as their own *Pages* layer, right after controllers, so a request flow now ends where users see it: `GET /orders → auth → OrderController@index → Orders/Index`. The pages folder is read from `import.meta.glob(...)` in your app entry, with `resources/js/Pages` and `resources/js/pages` as fallbacks.
+- Controllers, route closures and `Route::inertia('/about', 'About')` are linked to the pages they render. Selecting a page shows the props it declares, with required ones highlighted.
+- CodeLens above every `Inertia::render(...)` opens the Vue page it returns.
+- LaraScura Doctor checks Inertia:
+  - pages that do not exist (`Inertia::render('Users/Idnex')` → *Did you mean "Users/Index"?*), and page names that only match when letter case is ignored, which fail on Linux servers;
+  - props whose name does not match what the page declares (`'ordres'` → `orders`), with a quick fix;
+  - required props that no render passes and shared data does not provide.
+- Page props are read from `defineProps<{...}>()`, `defineProps<Props>()` with a local interface or type, `withDefaults(...)`, runtime object and array declarations, and the Options API. Shared props come from `HandleInertiaRequests::share()`.
+- Doctor stays quiet when props are built dynamically (payload classes, variables), when a render sends a subset of another render's props (a partial reload), and when shared data cannot be read completely. Child components kept under `Pages/components` are not shown as pages.
+
 ## 0.5.4
 
 - Added a small medical cross to the Doctor badge in the Inspector.

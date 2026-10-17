@@ -1,4 +1,5 @@
 import { viewReferences } from './phpParser.js';
+import type { PageProps } from './inertia.js';
 import type { Finding, ParsedClass, ParsedRoute } from './types.js';
 
 export type { Finding };
@@ -12,6 +13,13 @@ export interface DoctorInput {
   unresolvedMiddleware: Set<string>;
   /** View names under resources/views, or undefined when views cannot be checked reliably. */
   viewNames?: Set<string>;
+  inertia?: {
+    /** False when no Inertia pages folder was found, so missing pages cannot be judged. */
+    pagesKnown: boolean;
+    pages: Map<string, { file: string; props?: PageProps }>;
+    shared: { keys: string[]; complete: boolean };
+    renders: Array<{ file: string; line: number; page: string; props?: string[] }>;
+  };
 }
 
 // Parents and traits whose methods are known not to provide route actions.
@@ -269,7 +277,78 @@ export const diagnose = (input: DoctorInput): Finding[] => {
     }
   }
 
+  if (input.inertia) findings.push(...diagnoseInertia(input.inertia));
+
   return findings.sort((left, right) => left.file.localeCompare(right.file) || left.line - right.line);
+};
+
+const diagnoseInertia = (inertia: NonNullable<DoctorInput['inertia']>): Finding[] => {
+  const findings: Finding[] = [];
+  const pageNames = [...inertia.pages.keys()];
+  // Props some render of each page provides. A render that sends a subset of them is a partial reload
+  // (router.reload({ only: [...] })): Inertia merges it into the props the page already has.
+  const providedSomewhere = new Map<string, Set<string>>();
+  for (const render of inertia.renders) {
+    const provided = providedSomewhere.get(render.page) ?? new Set<string>();
+    render.props?.forEach((prop) => provided.add(prop));
+    providedSomewhere.set(render.page, provided);
+  }
+  for (const render of inertia.renders) {
+    const page = inertia.pages.get(render.page);
+    if (!page) {
+      if (!inertia.pagesKnown) continue;
+      const sameIgnoringCase = pageNames.find((name) => name.toLowerCase() === render.page.toLowerCase());
+      const suggestion = sameIgnoringCase ?? closest(render.page, pageNames);
+      findings.push({
+        file: render.file,
+        line: render.line,
+        severity: 'warning',
+        code: 'missing-page',
+        message: sameIgnoringCase
+          ? `Inertia page "${render.page}" only matches "${sameIgnoringCase}" when letter case is ignored. It works on macOS but shows a blank page on case-sensitive Linux servers.`
+          : `Inertia page "${render.page}" does not exist, so the browser shows a blank page instead of an error.${didYouMean(suggestion)}`,
+        token: render.page,
+        replacement: suggestion,
+      });
+      continue;
+    }
+
+    // Props are only compared when both sides are fully known.
+    if (!page.props || !render.props) continue;
+    const passed = new Set(render.props);
+    const shared = new Set(inertia.shared.keys);
+    const declared = page.props.props.map((prop) => prop.name);
+    const typoTargets = new Set<string>();
+    for (const key of render.props) {
+      if (declared.includes(key)) continue;
+      const suggestion = closest(key, declared.filter((name) => !passed.has(name) && !shared.has(name)));
+      if (!suggestion) continue;
+      typoTargets.add(suggestion);
+      findings.push({
+        file: render.file,
+        line: render.line,
+        severity: 'warning',
+        code: 'inertia-props',
+        message: `This render passes "${key}", but page ${render.page} declares "${suggestion}", so the page receives undefined. Did you mean "${suggestion}"?`,
+        token: key,
+        replacement: suggestion,
+      });
+    }
+    if (!inertia.shared.complete) continue;
+    for (const prop of page.props.props) {
+      if (!prop.required || passed.has(prop.name) || shared.has(prop.name) || typoTargets.has(prop.name)) continue;
+      if (providedSomewhere.get(render.page)?.has(prop.name)) continue;
+      findings.push({
+        file: render.file,
+        line: render.line,
+        severity: 'warning',
+        code: 'inertia-props',
+        message: `Page ${render.page} requires the prop "${prop.name}", but this render does not pass it, so Vue warns "Missing required prop" and the page sees undefined.`,
+        token: render.page,
+      });
+    }
+  }
+  return findings;
 };
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

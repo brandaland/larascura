@@ -282,6 +282,9 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .connection-kind { overflow: hidden; color: var(--kind-color); font-family: var(--vscode-editor-font-family); font-size: 9px; letter-spacing: .05em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
     .connection-target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .connection-more { padding: 6px; color: var(--vscode-descriptionForeground); font-size: 10px; }
+    .prop-list { display: flex; flex-wrap: wrap; gap: 5px; }
+    .prop-chip { padding: 2px 7px; border: 1px solid var(--vscode-panel-border); border-radius: 999px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; }
+    .prop-chip.required { color: var(--vscode-foreground); border-color: color-mix(in srgb, var(--detail-color, #42b883) 60%, transparent); background: color-mix(in srgb, var(--detail-color, #42b883) 12%, transparent); }
     .emblem { display: block; width: 132px; height: 70px; margin: 0 0 14px; }
     .emblem-link { fill: none; stroke: var(--vscode-descriptionForeground); stroke-width: 1.4; opacity: .45; }
     .emblem-node { stroke: var(--vscode-sideBar-background); stroke-width: 2; }
@@ -357,17 +360,17 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
   <script nonce="${token}">
     const vscode = acquireVsCodeApi();
     const colors = {
-      route: '#22c55e', middleware: '#f59e0b', request: '#f97316', controller: '#3b82f6',
+      route: '#22c55e', middleware: '#f59e0b', request: '#f97316', controller: '#3b82f6', page: '#42b883',
       service: '#8b5cf6', repository: '#a855f7', model: '#ef4444',
       job: '#64748b', event: '#eab308', listener: '#14b8a6',
       provider: '#ec4899', command: '#06b6d4', class: '#94a3b8'
     };
     const layers = [
-      ['route'], ['middleware', 'request'], ['controller'], ['service', 'repository', 'provider'],
+      ['route'], ['middleware', 'request'], ['controller'], ['page'], ['service', 'repository', 'provider'],
       ['model', 'class'], ['event', 'job', 'listener', 'command']
     ];
     const kindLabels = {
-      route: 'Routes', middleware: 'Middleware', request: 'Form Requests', controller: 'Controllers',
+      route: 'Routes', middleware: 'Middleware', request: 'Form Requests', controller: 'Controllers', page: 'Pages',
       service: 'Services', repository: 'Repositories', model: 'Models',
       job: 'Jobs', event: 'Events', listener: 'Listeners',
       provider: 'Providers', command: 'Commands', class: 'Other classes'
@@ -610,7 +613,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     }
 
     // The order a request travels through a Laravel app; the navigator and spectrum follow it.
-    const lifecycleOrder = ['route', 'middleware', 'request', 'controller', 'service', 'repository', 'provider', 'model', 'event', 'listener', 'job', 'command', 'class'];
+    const lifecycleOrder = ['route', 'middleware', 'request', 'controller', 'page', 'service', 'repository', 'provider', 'model', 'event', 'listener', 'job', 'command', 'class'];
     const methodColors = { GET: '#22c55e', HEAD: '#22c55e', POST: '#3b82f6', PUT: '#f59e0b', PATCH: '#f59e0b', DELETE: '#ef4444', OPTIONS: '#94a3b8', ANY: '#94a3b8' };
 
     function methodBadge(method) {
@@ -1025,6 +1028,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         degreeMeter(incoming.length, outgoing.length),
         section('What is this?', node.summary)
       );
+      if (node.props?.length) detailContent.append(propsSection(node.props));
       if (incoming.length || outgoing.length) detailContent.append(connectionSection(incoming, outgoing));
       detailContent.append(
         section('Laravel syntax', node.syntax, node.location.preview),
@@ -1050,6 +1054,20 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       meter.title = incomingCount + ' incoming and ' + outgoingCount + ' outgoing connections';
       meter.append(side(incomingCount, 'in'), text('span', '', 'degree-core'), side(outgoingCount, 'out'));
       return meter;
+    }
+
+    function propsSection(props) {
+      const list = document.createElement('div');
+      list.className = 'prop-list';
+      props.forEach(prop => {
+        const chip = text('span', prop.name + (prop.required ? '' : '?'), 'prop-chip' + (prop.required ? ' required' : ''));
+        chip.title = prop.required ? 'Required: every render must pass it' : 'Optional';
+        list.append(chip);
+      });
+      const wrapper = document.createElement('section');
+      wrapper.className = 'section';
+      wrapper.append(text('h3', 'Props'), list);
+      return wrapper;
     }
 
     function connectionSection(incoming, outgoing) {

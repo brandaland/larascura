@@ -2,7 +2,7 @@
   "name": "larascura",
   "displayName": "LaraScura",
   "description": "Visualize Laravel architecture, follow request flows, and understand the syntax.",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "publisher": "ooll",
   "author": {
     "name": "Ozkan A."
@@ -47,7 +47,9 @@
     "laravel learning",
     "diagnostics",
     "linter",
-    "typo"
+    "typo",
+    "inertia",
+    "vue"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
@@ -90,6 +92,10 @@
       {
         "command": "larascura.openMethod",
         "title": "LaraScura: Open Controller Method"
+      },
+      {
+        "command": "larascura.openFile",
+        "title": "LaraScura: Open File"
       }
     ],
     "viewsContainers": {
@@ -146,6 +152,10 @@
         {
           "command": "larascura.revealInMap",
           "when": "editorLangId == php"
+        },
+        {
+          "command": "larascura.openFile",
+          "when": "false"
         }
       ]
     },

@@ -18,4 +18,9 @@ class OrderController extends Controller
     {
         return $order;
     }
+
+    public function index()
+    {
+        return \Inertia\Inertia::render('Orders/Index', ['ordres' => Order::all(), 'filters' => []]);
+    }
 }

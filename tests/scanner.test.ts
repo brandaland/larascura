@@ -27,15 +27,30 @@ vi.mock('vscode', () => {
     env: { language: 'en' },
     workspace: {
       getConfiguration: () => ({ get: (_key: string, fallback: unknown) => fallback }),
-      // Mirror the scanner's `{dir,dir}/**/*.php` glob against the fixture.
-      findFiles: async (include: { base: { fsPath: string }; pattern: string }) =>
-        include.pattern
-          .replace(/\/\*\*\/\*\.php$/, '')
-          .replace(/^\{|\}$/g, '')
-          .split(',')
-          .flatMap((folder) => walk(path.join(include.base.fsPath, folder)))
-          .filter((file) => file.endsWith('.php'))
-          .map(uri),
+      // A small glob matcher (**, *, {a,b}) so every pattern the scanner asks for runs against the fixture.
+      findFiles: async (include: { base: { fsPath: string }; pattern: string }, exclude?: { pattern: string }) => {
+        const toRegExp = (glob: string): RegExp => {
+          let source = '';
+          for (let index = 0; index < glob.length; index += 1) {
+            const character = glob[index]!;
+            if (character === '*' && glob[index + 1] === '*') {
+              source += '(?:.*/)?';
+              index += glob[index + 2] === '/' ? 2 : 1;
+            } else if (character === '*') source += '[^/]*';
+            else if (character === '{') source += '(?:';
+            else if (character === '}') source += ')';
+            else if (character === ',') source += '|';
+            else source += /[.+?^$()[\]|\\]/.test(character) ? `\\${character}` : character;
+          }
+          return new RegExp(`^${source}$`);
+        };
+        const included = toRegExp(include.pattern);
+        const excluded = exclude ? toRegExp(exclude.pattern) : undefined;
+        return walk(include.base.fsPath)
+          .map((file) => ({ file, relative: path.relative(include.base.fsPath, file).split(path.sep).join('/') }))
+          .filter(({ relative }) => included.test(relative) && !excluded?.test(relative))
+          .map(({ file }) => uri(file));
+      },
       fs: {
         readFile: async (target: { fsPath: string }) => fs.readFileSync(target.fsPath),
         stat: async (target: { fsPath: string }) => ({ type: fs.statSync(target.fsPath).isDirectory() ? 2 : 1 }),
@@ -108,6 +123,35 @@ describe('Laravel scanner on a fixture project', () => {
   });
 });
 
+describe('Inertia on a fixture project', () => {
+  it('maps Vue pages and links controllers and Route::inertia to them', async () => {
+    const graph = await scanFixture();
+    const pages = graph.nodes.filter((node) => node.kind === 'page');
+
+    expect(pages.filter((node) => !node.external).map((node) => node.label).sort()).toEqual(['About', 'Dashboard', 'Orders/Index']);
+    expect(pages.find((node) => node.label === 'Orders/Index')?.syntax).toBe('Props declared with defineProps: orders, filters?');
+
+    const renders = graph.edges.filter((edge) => edge.kind === 'renders');
+    expect(renders.map((edge) => [edge.source.split(':').slice(0, 2).join(':').replace(/:\/.*/, ''), edge.target, edge.label]).sort()).toEqual([
+      ['controller:App\\Http\\Controllers\\DashboardController', 'page:Dashbaord', '__invoke()'],
+      ['controller:App\\Http\\Controllers\\OrderController', 'page:Orders/Index', 'index()'],
+      ['route', 'page:About', 'renders'],
+    ]);
+    // The misspelled page exists only as a reference.
+    expect(pages.find((node) => node.label === 'Dashbaord')?.external).toBe(true);
+  });
+
+  it('reports the missing page and the misspelled prop with quick fixes', async () => {
+    const graph = await scanFixture();
+    const inertia = graph.findings.filter((finding) => finding.code === 'missing-page' || finding.code === 'inertia-props');
+
+    expect(inertia.map((finding) => [finding.code, path.basename(finding.file), finding.token, finding.replacement])).toEqual([
+      ['missing-page', 'DashboardController.php', 'Dashbaord', 'Dashboard'],
+      ['inertia-props', 'OrderController.php', 'ordres', 'orders'],
+    ]);
+  });
+});
+
 describe('CodeLens model on a fixture project', () => {
   const fixtureFile = (relative: string) => path.join(fixtureRoot, relative);
   const lensesFor = async (relative: string) => {
@@ -145,6 +189,17 @@ describe('CodeLens model on a fixture project', () => {
 
     // Framework middleware nodes point at routes/web.php but are not defined there.
     expect(lenses.some((lens) => lens.title.includes('connection'))).toBe(false);
+  });
+
+  it('points Inertia renders at their Vue page, and flags a missing page', async () => {
+    const orderLenses = await lensesFor('app/Http/Controllers/OrderController.php');
+    expect(orderLenses.find((lens) => lens.line === 24)).toEqual(expect.objectContaining({
+      title: '$(browser) → Orders/Index',
+      command: { id: 'larascura.openFile', file: fixtureFile('resources/js/Pages/Orders/Index.vue'), line: 2 },
+    }));
+
+    const dashboardLenses = await lensesFor('app/Http/Controllers/DashboardController.php');
+    expect(dashboardLenses.find((lens) => lens.line === 9)?.title).toBe('$(warning) Dashbaord page not found');
   });
 
   it('picks the route above the cursor, or the class defined in the file', async () => {

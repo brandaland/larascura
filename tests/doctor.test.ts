@@ -251,4 +251,53 @@ describe('LaraScura Doctor', () => {
     ]);
     expect(findings.find((finding) => finding.route?.uri === '/subscribe')?.message).toContain('probably a leftover');
   });
+
+  describe('Inertia', () => {
+    const page = (...props: Array<[string, boolean]>) => ({
+      file: 'resources/js/Pages/Orders/Index.vue',
+      props: { props: props.map(([name, required]) => ({ name, required })), complete: true, line: 2 },
+    });
+    const inertia = (overrides: Partial<NonNullable<DoctorInput['inertia']>>): DoctorInput['inertia'] => ({
+      pagesKnown: true,
+      pages: new Map([['Orders/Index', page(['orders', true], ['filters', false], ['auth', true])]]),
+      shared: { keys: ['errors', 'auth'], complete: true },
+      renders: [],
+      ...overrides,
+    });
+    const render = (props: string[] | undefined, pageName = 'Orders/Index') => [{ file: 'app/Http/Controllers/OrderController.php', line: 9, page: pageName, props }];
+
+    it('accepts required props that come from shared data', () => {
+      expect(diagnose(input({ inertia: inertia({ renders: render(['orders']) }) }))).toEqual([]);
+    });
+
+    it('reports a required prop that nothing provides', () => {
+      const findings = diagnose(input({ inertia: inertia({ renders: render(['filters']) }) }));
+      expect(findings).toEqual([expect.objectContaining({ code: 'inertia-props', token: 'Orders/Index' })]);
+      expect(findings[0]?.replacement).toBeUndefined();
+      expect(findings[0]?.message).toContain('requires the prop "orders"');
+    });
+
+    it('treats a render that sends a subset of another render\'s props as a partial reload', () => {
+      const renders = [...render(['orders', 'filters']), { ...render(['filters'])[0]!, line: 20 }];
+      expect(diagnose(input({ inertia: inertia({ renders }) }))).toEqual([]);
+    });
+
+    it('skips the required-prop check when shared data cannot be read completely', () => {
+      expect(diagnose(input({ inertia: inertia({ renders: render(['filters']), shared: { keys: ['errors'], complete: false } }) }))).toEqual([]);
+    });
+
+    it('stays silent when the props are built dynamically', () => {
+      expect(diagnose(input({ inertia: inertia({ renders: render(undefined) }) }))).toEqual([]);
+    });
+
+    it('explains a page name that differs only in letter case', () => {
+      const findings = diagnose(input({ inertia: inertia({ renders: render(['orders'], 'orders/index') }) }));
+      expect(findings).toEqual([expect.objectContaining({ code: 'missing-page', replacement: 'Orders/Index' })]);
+      expect(findings[0]?.message).toContain('case-sensitive Linux servers');
+    });
+
+    it('does not judge missing pages when no pages folder was found', () => {
+      expect(diagnose(input({ inertia: inertia({ pagesKnown: false, pages: new Map(), renders: render(['x'], 'Anything') }) }))).toEqual([]);
+    });
+  });
 });

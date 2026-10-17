@@ -135,7 +135,9 @@ class LaraScuraCodeLensProvider implements vscode.CodeLensProvider {
       const line = Math.max(0, Math.min(entry.line - 1, document.lineCount - 1));
       const args = entry.command.id === 'larascura.openMethod'
         ? [entry.command.file, entry.command.method]
-        : [entry.command.nodeId];
+        : entry.command.id === 'larascura.openFile'
+          ? [entry.command.file, entry.command.line]
+          : [entry.command.nodeId];
       return new vscode.CodeLens(document.lineAt(line).range, {
         title: entry.title,
         tooltip: entry.tooltip,
@@ -251,6 +253,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       GraphPanel.show(context, current, refreshMap, target);
     }),
     vscode.commands.registerCommand('larascura.openMethod', openMethod),
+    vscode.commands.registerCommand('larascura.openFile', (file: string, line: number) => openFileAt(file, () => line)),
     vscode.commands.registerCommand('larascura.openMap', async () => {
       const current = graph ?? (await scanWithUi());
       if (!current) return;

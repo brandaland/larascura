@@ -3,6 +3,7 @@ export type NodeKind =
   | 'middleware'
   | 'request'
   | 'controller'
+  | 'page'
   | 'service'
   | 'repository'
   | 'model'
@@ -19,6 +20,7 @@ export type RelationKind =
   | 'injects'
   | 'validates'
   | 'resolves'
+  | 'renders'
   | 'calls'
   | 'dispatches'
   | 'fires'
@@ -42,6 +44,8 @@ export interface ArchitectureNode {
   syntax: string;
   /** True when the node was only referenced; its location points at the reference, not a definition. */
   external?: boolean;
+  /** Inertia page props read from defineProps. */
+  props?: Array<{ name: string; required: boolean }>;
 }
 
 export interface ArchitectureEdge {
@@ -61,7 +65,7 @@ export interface Finding {
   line: number;
   severity: 'warning' | 'information';
   code: 'missing-action' | 'missing-invoke' | 'resource-actions' | 'missing-controller' | 'unknown-middleware'
-    | 'missing-model' | 'duplicate-route' | 'missing-view' | 'namespace-case';
+    | 'missing-model' | 'duplicate-route' | 'missing-view' | 'namespace-case' | 'missing-page' | 'inertia-props';
   message: string;
   /** The text in the line the finding is about; the editor underlines it. */
   token?: string;
@@ -130,4 +134,7 @@ export interface ParsedRoute {
   name?: string;
   /** Handled by a closure; controller/action are set when the closure delegates to a class. */
   closure?: boolean;
+  /** Route::inertia('/about', 'About', [...]) renders this Inertia page directly. */
+  page?: string;
+  pageProps?: string[];
 }

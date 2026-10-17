@@ -1,6 +1,6 @@
 import type { NodeKind, ParsedClass, ParsedMiddlewareAlias, ParsedRoute, ViewReference } from './types.js';
 
-const lineNumber = (source: string, index: number): number =>
+export const lineNumber = (source: string, index: number): number =>
   source.slice(0, Math.max(0, index)).split('\n').length;
 
 const shortName = (name: string): string => name.split('\\').pop() ?? name;
@@ -97,8 +97,20 @@ const classify = (file: string, name: string, extendsName = ''): ParsedClass['ki
   return 'class';
 };
 
+/** Keys of a PHP array literal body, or undefined when any entry is spread, unkeyed or computed. */
+export const phpArrayKeys = (body: string): string[] | undefined => {
+  const keys: string[] = [];
+  for (const part of topLevelParts(body)) {
+    if (!part.text.trim()) continue;
+    const key = /^\s*(['"])([\w.-]+)\1\s*=>/.exec(part.text);
+    if (!key?.[2]) return undefined;
+    keys.push(key[2]);
+  }
+  return keys;
+};
+
 // Returns the index just after the bracket that closes the one at `open`, skipping strings.
-const balancedEnd = (source: string, open: number): number | undefined => {
+export const balancedEnd = (source: string, open: number): number | undefined => {
   let depth = 0;
   let quote = '';
   for (let index = open; index < source.length; index += 1) {
@@ -118,7 +130,7 @@ const balancedEnd = (source: string, open: number): number | undefined => {
   return undefined;
 };
 
-const topLevelParts = (value: string): Array<{ text: string; offset: number }> => {
+export const topLevelParts = (value: string): Array<{ text: string; offset: number }> => {
   const parts: Array<{ text: string; offset: number }> = [];
   let depth = 0;
   let quote = '';
@@ -725,6 +737,32 @@ export const parseRoutes = (source: string): ParsedRoute[] => {
     if (end !== undefined && end > matchPattern.lastIndex) matchPattern.lastIndex = end;
   }
 
+  // Route::inertia('/about', 'About', ['team' => ...]) renders a page without a controller.
+  const inertiaPattern = /Route::inertia\s*\(\s*(['"])(.*?)\1\s*,\s*(['"])([^'"]+)\3/g;
+  while ((match = inertiaPattern.exec(source))) {
+    const callEnd = balancedEnd(source, source.indexOf('(', match.index));
+    const argumentsEnd = callEnd === undefined ? match.index + match[0].length : callEnd - 1;
+    const third = /^\s*,\s*\[/.exec(source.slice(match.index + match[0].length, argumentsEnd));
+    let pageProps: string[] | undefined = [];
+    if (third) {
+      const open = match.index + match[0].length + third[0].length - 1;
+      const close = balancedEnd(source, open);
+      pageProps = close === undefined ? undefined : phpArrayKeys(source.slice(open + 1, close - 1));
+    }
+    const chain = callEnd === undefined ? '' : (/^\s*((?:->[^;]+)?)\s*;/.exec(source.slice(callEnd))?.[1] ?? '');
+    const middlewareCall = /->middleware\s*\(([^)]*)\)/.exec(chain);
+    const context = routeContext(groups, match.index, match[2] ?? '/', middlewareCall?.[1] ? middlewareFrom(middlewareCall[1], resolve) : []);
+    routes.push({
+      method: 'GET',
+      uri: context.uri,
+      middleware: context.middleware,
+      line: lineNumber(source, match.index),
+      page: match[4],
+      pageProps,
+      ...(routeName(chain, context.namePrefix) ? { name: routeName(chain, context.namePrefix) } : {}),
+    });
+  }
+
   const resourcePattern = /Route::(apiResource|resource)\s*\(\s*(['"])(.*?)\2\s*,\s*(?:([\\\w]+)::class|(['"])([\\\w]+)\5)\s*\)\s*((?:->[^;]+)?)\s*;/g;
   while ((match = resourcePattern.exec(source))) {
     const controller = controllerName(match[4], match[6], resolve);
@@ -789,6 +827,7 @@ export const kindSummary = (kind: NodeKind, language: 'en' | 'tr'): string => {
     route: ['HTTP isteğinin uygulamaya giriş noktasıdır.', 'The HTTP entry point into the application.'],
     middleware: ['İsteği controller’dan önce denetleyen katmandır.', 'A layer that checks or transforms a request before the controller.'],
     request: ['İsteği controller metodu çalışmadan önce doğrulayan ve yetkilendiren Form Request sınıfıdır.', 'A Form Request that validates and authorizes input before the controller action runs.'],
+    page: ['Tarayıcıda Vue/React ile çizilen Inertia sayfasıdır; controller ona props olarak veri gönderir.', 'An Inertia page component rendered in the browser; the controller sends it data as props.'],
     controller: ['HTTP isteğini karşılar ve uygulama akışını koordine eder.', 'Receives HTTP requests and coordinates application flow.'],
     service: ['Tekrar kullanılabilir iş kurallarını taşır.', 'Contains reusable application or business logic.'],
     repository: ['Veriye erişimi soyutlayan katmandır.', 'Abstracts persistence and data access.'],

@@ -535,4 +535,39 @@ describe('LaraScura architecture webview', () => {
     expect(document.querySelectorAll('.finding')).toHaveLength(2);
     dom.window.close();
   });
+
+  it('shows an Inertia page with its props and the controller that renders it', () => {
+    const dom = new JSDOM(createGraphHtml('test-nonce'), {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      virtualConsole: new VirtualConsole(),
+      beforeParse(window) {
+        Object.assign(window, {
+          acquireVsCodeApi: () => ({ postMessage: () => undefined, getState: () => undefined, setState: () => undefined }),
+        });
+      },
+    });
+    const location = { file: '/workspace/example/app/X.php', line: 1 };
+    const graph: ArchitectureGraph = {
+      projectName: 'example/app', root: '/workspace/example', sourceDirectories: ['app', 'routes'],
+      generatedAt: new Date(0).toISOString(), warnings: [], findings: [],
+      nodes: [
+        { id: 'controller', label: 'OrderController', kind: 'controller', location, summary: '', syntax: '' },
+        {
+          id: 'page:Orders/Index', label: 'Orders/Index', kind: 'page', location, summary: 'An Inertia page.', syntax: '',
+          props: [{ name: 'orders', required: true }, { name: 'filters', required: false }],
+        },
+      ],
+      edges: [{ id: 'r', source: 'controller', target: 'page:Orders/Index', kind: 'renders', label: 'index()', location, explanation: '', confidence: 'exact' }],
+    };
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph } }));
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'focus', nodeId: 'page:Orders/Index' } }));
+    const document = dom.window.document;
+
+    expect([...document.querySelectorAll('.prop-chip')].map((chip) => chip.textContent)).toEqual(['orders', 'filters?']);
+    expect(document.querySelector('.prop-chip.required')?.textContent).toBe('orders');
+    expect(document.querySelector('.connection')?.textContent).toBe('←rendersOrderController');
+    expect([...document.querySelectorAll('.layer-button .nav-label')].map((label) => label.textContent)).toEqual(['Controllers', 'Pages']);
+    dom.window.close();
+  });
 });

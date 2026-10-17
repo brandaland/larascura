@@ -7,7 +7,8 @@ export interface LensEntry {
   tooltip: string;
   command:
     | { id: 'larascura.revealInMap'; nodeId: string }
-    | { id: 'larascura.openMethod'; file: string; method: string };
+    | { id: 'larascura.openMethod'; file: string; method: string }
+    | { id: 'larascura.openFile'; file: string; line: number };
 }
 
 const maxRoutesPerAction = 2;
@@ -118,6 +119,15 @@ export const codeLensEntries = (graph: ArchitectureGraph, file: string, text: st
         });
       }
     }
+  }
+
+  // Inertia::render('Page') lines point at the Vue page they return.
+  for (const edge of graph.edges.filter((candidate) => candidate.kind === 'renders' && sameFile(candidate.location.file, file))) {
+    const page = nodesById.get(edge.target);
+    if (!page) continue;
+    entries.push(page.external
+      ? { line: edge.location.line, title: `$(warning) ${page.label} page not found`, tooltip: 'LaraScura Doctor reports this missing page', command: { id: 'larascura.revealInMap', nodeId: page.id } }
+      : { line: edge.location.line, title: `$(browser) → ${page.label}`, tooltip: `Open ${page.location.file}`, command: { id: 'larascura.openFile', file: page.location.file, line: page.location.line } });
   }
 
   return entries;
