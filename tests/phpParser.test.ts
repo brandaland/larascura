@@ -185,6 +185,7 @@ describe('Laravel PHP syntax parser', () => {
         middleware: ['auth', 'verified'],
         line: 5,
         fromResource: true,
+        name: 'orders.index',
       },
       {
         method: 'GET',
@@ -194,6 +195,7 @@ describe('Laravel PHP syntax parser', () => {
         middleware: ['auth', 'verified'],
         line: 5,
         fromResource: true,
+        name: 'orders.show',
       },
     ]);
   });
@@ -392,6 +394,47 @@ describe('Laravel PHP syntax parser', () => {
     expect(summary).toContain('GET /photos/{photo}/edit App\\Http\\Controllers\\PhotoController@edit');
     expect(summary).toContain('DELETE /posts/{post} PostController@destroy');
     expect(routes.filter((route) => route.controller === 'PostController')).toHaveLength(7);
+  });
+
+  it('reads whole closures, follows delegation, and keeps the middleware chained after them', () => {
+    const routes = parseRoutes([
+      '<?php',
+      'use App\\Http\\Controllers\\CronController;',
+      "Route::get('config', function (Request $request) {",
+      "    if ($request->wantsJson()) { abort(403); }",
+      '    return app(\\App\\Http\\Controllers\\Api\\HomeController::class)->config($request);',
+      "})->middleware('auth');",
+      "Route::get('/cron/run', function (Request $request, CronController $controller) use ($guard) {",
+      '    $guard($request);',
+      '    return $controller->run();',
+      '});',
+      "Route::get('/test-500', function () { abort(500); });",
+      "Route::get('/arrow', fn () => (new \\App\\Http\\Controllers\\PageController)->about());",
+      "Route::get('/after', [CronController::class, 'status']);",
+    ].join('\n'));
+
+    expect(routes.map((route) => [route.uri, route.controller, route.action, route.closure, route.middleware])).toEqual([
+      ['/config', 'App\\Http\\Controllers\\Api\\HomeController', 'config', true, ['auth']],
+      ['/cron/run', 'App\\Http\\Controllers\\CronController', 'run', true, []],
+      ['/test-500', undefined, undefined, true, []],
+      ['/arrow', 'App\\Http\\Controllers\\PageController', 'about', true, []],
+      ['/after', 'App\\Http\\Controllers\\CronController', 'status', undefined, []],
+    ]);
+  });
+
+  it('names routes with their group prefixes', () => {
+    const routes = parseRoutes([
+      '<?php',
+      'use App\\Http\\Controllers\\ShippingController;',
+      "Route::name('admin.')->prefix('admin')->group(function () {",
+      "    Route::controller(ShippingController::class)->name('shipping.')->group(function () {",
+      "        Route::get('methods', 'method')->name('method.index');",
+      '    });',
+      "    Route::resource('admin/users', ShippingController::class)->only(['index']);",
+      '});',
+    ].join('\n'));
+
+    expect(routes.map((route) => route.name)).toEqual(['admin.shipping.method.index', 'admin.users.index']);
   });
 
   it('explains common Laravel syntax without a network service', () => {

@@ -111,6 +111,7 @@ export const diagnose = (input: DoctorInput): Finding[] => {
             code: 'missing-controller',
             message: `Controller ${route.controller} was not found.${didYouMean(closest(shortName(route.controller), classesOfKind('controller')))}`,
             token: shortName(route.controller),
+            route: { uri: route.uri, name: route.name },
           });
         }
         continue;
@@ -133,6 +134,7 @@ export const diagnose = (input: DoctorInput): Finding[] => {
           code: 'missing-invoke',
           message: `${controller.parsed.shortName} is used as a single-action controller but has no __invoke() method, so this route fails when it is called.`,
           token: controller.parsed.shortName,
+          route: { uri: route.uri, name: route.name },
         });
       } else {
         const declared = controller.parsed.methods.map((method) => method.name).filter((method) => !method.startsWith('__'));
@@ -145,6 +147,7 @@ export const diagnose = (input: DoctorInput): Finding[] => {
           message: `${controller.parsed.shortName} has no method "${action}()", so this route fails with "Method does not exist".${didYouMean(suggestion)}`,
           token: action,
           replacement: suggestion,
+          route: { uri: route.uri, name: route.name },
         });
       }
     }
@@ -269,3 +272,38 @@ export const diagnose = (input: DoctorInput): Finding[] => {
   return findings.sort((left, right) => left.file.localeCompare(right.file) || left.line - right.line);
 };
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Marks each route finding as linked (a page or class points at the route by name or URL), unlinked,
+ * or unknown (API routes and callbacks are called from outside the codebase), so real breakage can be
+ * told apart from leftovers. `files` are views, scripts and classes; route files are left out.
+ */
+export const linkRouteFindings = (findings: Finding[], files: Array<{ file: string; text: string }>): void => {
+  for (const finding of findings) {
+    if (!finding.route) continue;
+    const { uri, name } = finding.route;
+    if (/(^|[\\/])routes[\\/](api|channels|console)\.php$/.test(finding.file) || /^\/?api(\/|$)|callback|webhook|ipn|notify|hook/i.test(uri)) {
+      finding.reach = 'unknown';
+      finding.message += ' It is likely called from outside the app (API client, payment provider or webhook), so check it even if no page links to it.';
+      continue;
+    }
+    const staticPath = uri.split('{')[0]!.replace(/\/+$/, '');
+    const needles: RegExp[] = [];
+    if (name) needles.push(new RegExp(`route\\(\\s*['"]${escapeRegExp(name)}['"]`));
+    // URLs built by hand ("/currency/change/" + currency); too short a path would match unrelated text.
+    if (staticPath.length >= 6) needles.push(new RegExp(`${escapeRegExp(staticPath)}(?=[/'"\`?#\\s]|$)`));
+    const linkedFrom: Array<{ file: string; line: number }> = [];
+    for (const { file, text } of files) {
+      if (!needles.some((needle) => needle.test(text))) continue;
+      text.split(/\r?\n/).forEach((lineText, index) => {
+        if (linkedFrom.length < 5 && needles.some((needle) => needle.test(lineText))) linkedFrom.push({ file, line: index + 1 });
+      });
+    }
+    finding.reach = linkedFrom.length ? 'linked' : 'unlinked';
+    finding.linkedFrom = linkedFrom;
+    finding.message += linkedFrom.length
+      ? ` Users can reach it: it is linked from ${linkedFrom.length === 5 ? '5 or more places' : `${linkedFrom.length} place${linkedFrom.length === 1 ? '' : 's'}`}.`
+      : ' No page or class links to it, so it is probably a leftover; remove the route or add the method.';
+  }
+};

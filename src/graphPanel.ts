@@ -72,7 +72,7 @@ export class GraphPanel {
       GraphPanel.current = undefined;
     }, null, context.subscriptions);
     this.panel.webview.onDidReceiveMessage(
-      async (message: { type?: string; nodeId?: string; edgeId?: string; index?: number }) => {
+      async (message: { type?: string; nodeId?: string; edgeId?: string; index?: number; link?: number }) => {
         if (message.type === 'ready') {
           this.ready = true;
           this.postGraph();
@@ -103,7 +103,8 @@ export class GraphPanel {
         // Findings are addressed by index so the webview can only open locations the scanner produced.
         if (message.type === 'openFinding' && typeof message.index === 'number') {
           const finding = this.graph.findings[message.index];
-          if (finding) await this.openLocation(finding);
+          const target = typeof message.link === 'number' ? finding?.linkedFrom?.[message.link] : finding;
+          if (target) await this.openLocation(target);
         }
       },
       null,
@@ -240,6 +241,9 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .finding-icon { color: var(--finding-color); }
     .finding-location { display: block; margin-top: 3px; overflow-wrap: anywhere; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; }
     .unresolved-list { margin: 0; padding-left: 16px; color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.5; }
+    .finding-reach { display: inline-block; margin-bottom: 4px; padding: 1px 6px; border-radius: 999px; color: var(--reach-color); background: color-mix(in srgb, var(--reach-color) 14%, transparent); font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .finding-link { display: block; margin-top: 2px; padding: 0; overflow-wrap: anywhere; color: var(--vscode-textLink-foreground); background: none; border: 0; font-family: var(--vscode-editor-font-family); font-size: 10px; text-align: left; cursor: pointer; }
+    .finding-link:hover { text-decoration: underline; }
     .specimen { margin: 0 4px 14px; padding: 12px 12px 10px; border: 1px solid var(--vscode-panel-border); border-radius: 10px; background: color-mix(in srgb, var(--vscode-editor-background) 65%, transparent); }
     .specimen-eyebrow { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 9px; letter-spacing: .18em; text-transform: uppercase; }
     .specimen-name { display: block; width: 100%; margin: 5px 0 3px; padding: 0; overflow: hidden; color: var(--vscode-foreground); background: none; border: 0; font-size: 13px; font-weight: 700; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -1108,6 +1112,11 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     }
 
     const findingColors = { warning: '#f59e0b', information: '#3b82f6' };
+    const reachLabels = {
+      linked: { label: 'Reachable · users can hit this', color: '#ef4444' },
+      unlinked: { label: 'Probably unused', color: '#94a3b8' },
+      unknown: { label: 'External caller', color: '#3b82f6' }
+    };
 
     function doctorSummary() {
       const findings = graph.findings || [];
@@ -1120,7 +1129,11 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       const body = document.createElement('span');
       body.append(
         text('strong', mistakes ? 'Doctor · ' + mistakes + ' possible mistake' + (mistakes === 1 ? '' : 's') : 'Doctor · no mistakes found'),
-        text('span', (findings.length - mistakes ? (findings.length - mistakes) + ' tip(s) · ' : '') + graph.warnings.length + ' left unresolved', 'doctor-detail')
+        text('span', [
+          findings.filter(finding => finding.reach === 'linked').length ? findings.filter(finding => finding.reach === 'linked').length + ' reachable by users' : '',
+          findings.length - mistakes ? (findings.length - mistakes) + ' tip(s)' : '',
+          graph.warnings.length + ' left unresolved'
+        ].filter(Boolean).join(' · '), 'doctor-detail')
       );
       button.append(text('span', '', 'doctor-pulse'), body, text('span', '›'));
       button.addEventListener('click', showDoctor);
@@ -1148,17 +1161,40 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       if (findings.length) {
         const list = document.createElement('div');
         list.className = 'finding-list';
-        findings.forEach((finding, index) => {
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'finding';
-          button.style.setProperty('--finding-color', findingColors[finding.severity] || findingColors.information);
-          const body = document.createElement('span');
-          body.append(text('span', finding.message), text('span', relativePath(finding.file) + ':' + finding.line, 'finding-location'));
-          button.append(text('span', finding.severity === 'warning' ? '⚠' : 'ℹ', 'finding-icon'), body);
-          button.addEventListener('click', () => vscode.postMessage({ type: 'openFinding', index }));
-          list.append(button);
-        });
+        // Breakage users can reach comes first, leftovers and tips last; indexes stay tied to graph.findings.
+        const rank = finding => (finding.reach === 'linked' ? 0 : finding.severity === 'warning' && finding.reach !== 'unlinked' ? 1 : finding.reach === 'unlinked' ? 2 : 3);
+        findings
+          .map((finding, index) => ({ finding, index }))
+          .sort((left, right) => rank(left.finding) - rank(right.finding) || left.index - right.index)
+          .forEach(({ finding, index }) => {
+            const button = document.createElement('div');
+            button.className = 'finding';
+            button.setAttribute('role', 'button');
+            button.tabIndex = 0;
+            button.style.setProperty('--finding-color', findingColors[finding.severity] || findingColors.information);
+            const body = document.createElement('span');
+            const reach = reachLabels[finding.reach];
+            if (reach) {
+              const tag = text('span', reach.label, 'finding-reach');
+              tag.style.setProperty('--reach-color', reach.color);
+              body.append(tag, document.createElement('br'));
+            }
+            body.append(text('span', finding.message), text('span', relativePath(finding.file) + ':' + finding.line, 'finding-location'));
+            (finding.linkedFrom || []).forEach((link, linkIndex) => {
+              const linkButton = text('button', '↳ ' + relativePath(link.file) + ':' + link.line, 'finding-link');
+              linkButton.type = 'button';
+              linkButton.title = 'Open the place that links to this route';
+              linkButton.addEventListener('click', event => {
+                event.stopPropagation();
+                vscode.postMessage({ type: 'openFinding', index, link: linkIndex });
+              });
+              body.append(linkButton);
+            });
+            button.append(text('span', finding.severity === 'warning' ? '⚠' : 'ℹ', 'finding-icon'), body);
+            button.addEventListener('click', () => vscode.postMessage({ type: 'openFinding', index }));
+            button.addEventListener('keydown', event => { if (event.key === 'Enter') vscode.postMessage({ type: 'openFinding', index }); });
+            list.append(button);
+          });
         const section = document.createElement('section');
         section.className = 'section';
         section.append(text('h3', 'Findings'), list);

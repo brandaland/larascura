@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ambiguousClassNames, createClassNameIndex, resolveClassName } from './classResolver.js';
 import { kindSummary, parseMiddlewareAliases, parsePhpClass, parseRoutes } from './phpParser.js';
-import { diagnose } from './doctor.js';
+import { diagnose, linkRouteFindings } from './doctor.js';
 import { isRouteFile, phpGlob, sourceDirectories } from './projectLayout.js';
 import type {
   ArchitectureEdge,
@@ -242,13 +242,14 @@ export class LaravelScanner {
     }
 
     const classNames = createClassNameIndex(classes.keys());
-    const collisions = ambiguousClassNames(classNames);
-    if (collisions.length) {
-      warnings.push(
-        `${collisions.length} ambiguous short class name(s) were left unresolved instead of being guessed: ${collisions.slice(0, 8).join(', ')}${collisions.length > 8 ? ', …' : ''}`,
-      );
-    }
-    const resolveClass = (name: string): string => resolveClassName(classNames, name);
+    const collisions = new Set(ambiguousClassNames(classNames));
+    // Only short names that were actually referenced without a namespace are a problem; imports and
+    // fully qualified references resolve fine even when two classes share a short name.
+    const ambiguousReferences = new Set<string>();
+    const resolveClass = (name: string): string => {
+      if (!name.includes('\\') && collisions.has(name)) ambiguousReferences.add(name);
+      return resolveClassName(classNames, name);
+    };
     // PHP class names are case-insensitive, so ...\\api\\UserController and ...\\Api\\UserController match.
     const findClassNode = (qualified: string): ArchitectureNode | undefined =>
       [...nodes.values()].find((node) => node.qualifiedName?.toLowerCase() === qualified.toLowerCase());
@@ -419,23 +420,32 @@ export class LaravelScanner {
           line: route.line,
           preview: linePreview(routeFile.source, route.line),
         };
+        const closureSyntax = route.controller
+          ? lang === 'tr'
+            ? `Bu route bir closure ile tanımlanmış; closure isteği ${route.controller.split('\\').pop()}@${route.action} metoduna devrediyor.`
+            : `This route is defined with a closure that hands the request to ${route.controller.split('\\').pop()}@${route.action}.`
+          : lang === 'tr'
+            ? 'Bu route isteği doğrudan route dosyasındaki bir closure ile işliyor; ayrı bir controller yok.'
+            : 'This route handles the request inline with a closure in the route file; there is no separate controller.';
         const routeNode: ArchitectureNode = {
           id: nodeId('route', `${routeFile.file}:${route.line}:${routeLabel}`),
           label: routeLabel,
           kind: 'route',
           location: routeLocation,
           summary: kindSummary('route', lang),
-          syntax: lang === 'tr'
-            ? 'Route facade üzerindeki HTTP metodu, URI ile handler arasındaki eşleşmeyi kaydeder.'
-            : 'The HTTP method on the Route facade registers a mapping between the URI and its handler.',
+          syntax: route.closure
+            ? closureSyntax
+            : lang === 'tr'
+              ? 'Route facade üzerindeki HTTP metodu, URI ile handler arasındaki eşleşmeyi kaydeder.'
+              : 'The HTTP method on the Route facade registers a mapping between the URI and its handler.',
         };
         nodes.set(routeNode.id, routeNode);
 
         if (route.controller) {
           const controller = ensureClassNode(resolveClass(route.controller), routeLocation, 'controller');
           addEdge(routeNode, controller, 'handles', route.action ?? '__invoke', routeLocation, route.action ?? '__invoke');
-        } else {
-          warnings.push(`${routeLabel}: closure or dynamic handler could not be linked to a controller.`);
+        } else if (!route.closure) {
+          warnings.push(`${routeLabel}: the handler is built dynamically and could not be linked to a controller.`);
         }
 
         for (const middlewareName of route.middleware) {
@@ -455,6 +465,13 @@ export class LaravelScanner {
       warnings.push('composer.json could not be parsed; the folder name is used as the project name.');
     }
 
+    if (ambiguousReferences.size) {
+      const names = [...ambiguousReferences].sort();
+      warnings.unshift(
+        `${names.length} class name(s) were referenced without a namespace while several classes share that name, so they were left unlinked instead of guessed: ${names.slice(0, 8).join(', ')}${names.length > 8 ? ', …' : ''}`,
+      );
+    }
+
     const findings = vscode.workspace.getConfiguration('larascura').get<boolean>('doctor', true)
       ? diagnose({
         classes,
@@ -464,6 +481,18 @@ export class LaravelScanner {
         viewNames: await viewNamesOf(root, token),
       })
       : [];
+    if (findings.some((finding) => finding.route)) {
+      const resourceFiles = await vscode.workspace.findFiles(
+        new vscode.RelativePattern(root, 'resources/**/*.{php,js,ts,jsx,tsx,vue}'),
+        new vscode.RelativePattern(root, '**/node_modules/**'),
+        5000,
+        token,
+      );
+      const texts: Array<{ file: string; text: string }> = [];
+      for (const uri of resourceFiles) texts.push({ file: uri.fsPath, text: decode(await vscode.workspace.fs.readFile(uri)) });
+      for (const { source, file } of classes.values()) texts.push({ file, text: source });
+      linkRouteFindings(findings, texts);
+    }
 
     return {
       projectName,

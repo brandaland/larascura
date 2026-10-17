@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.3
+
+- LaraScura Doctor now tells reachable breakage from leftovers. A broken route is marked **Reachable** when a view, script or class links to it by route name or URL (including hand-built URLs such as `"/currency/change/" + currency`), **Probably unused** when nothing does, and **External caller** for API routes and webhooks, which are called from outside the app. The linking places appear under the finding in the Problems panel and in the Doctor list, which now sorts reachable problems first.
+- Closure routes are understood instead of reported. A closure that hands over to a class (`app(X::class)->method()`, `(new X)->method()`, or a typed `X $x` followed by `$x->method()`) links the route to `X@method`; other closures are shown as handled inline.
+- Fixed closures being cut off at their first `);`, which dropped middleware chained after them and could link a route to the wrong class.
+- Routes now carry their full name, including group prefixes such as `admin.` and resource names such as `users.index`.
+- The ambiguous class name note only lists names that were actually referenced without a namespace, instead of every pair of classes that share a short name.
+
 ## 0.5.2
 
 - Fixed a minimized Inspector that could not be restored: the minimize button now toggles to restore, and clicking the minimized title bar opens it again. The minimized bar shows the Doctor count.

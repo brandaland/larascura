@@ -87,6 +87,12 @@ const publishFindings = async (findings: Finding[]): Promise<void> => {
       );
       diagnostic.source = 'LaraScura';
       diagnostic.code = finding.code;
+      if (finding.linkedFrom?.length) {
+        diagnostic.relatedInformation = finding.linkedFrom.map((link) => new vscode.DiagnosticRelatedInformation(
+          new vscode.Location(vscode.Uri.file(link.file), new vscode.Position(Math.max(0, link.line - 1), 0)),
+          'A page or class links to this route here',
+        ));
+      }
       if (finding.token && finding.replacement) quickFixes.set(fixKey(file, line + 1, finding.token), finding.replacement);
       return diagnostic;
     })]);

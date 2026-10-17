@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closest, diagnose, editDistance, type DoctorInput } from '../src/doctor.js';
+import { closest, diagnose, editDistance, linkRouteFindings, type DoctorInput } from '../src/doctor.js';
 import { parsePhpClass, parseRoutes } from '../src/phpParser.js';
 
 const php = (...lines: string[]): string => ['<?php', ...lines].join('\n');
@@ -218,5 +218,37 @@ describe('LaraScura Doctor', () => {
       classes: classes(['app/Payment/razorpay-php/tests/ApiTest.php', php('namespace Razorpay\\Tests;', 'class ApiTest {}')]),
     }));
     expect(copiedLibrary).toEqual([]);
+  });
+
+  it('separates broken routes users can reach from leftovers and external callers', () => {
+    const findings = diagnose(input({
+      classes: classes(baseController, orderController('public function index() {}')),
+      routeFiles: [
+        { file: 'routes/web.php', source: routeFile(
+          "Route::get('/currency/change/{currency?}', [OrderController::class, 'currencyChange'])->name('currency.change');",
+          "Route::post('/subscribe', [OrderController::class, 'subscribe'])->name('subscribe');",
+          "Route::get('/orders/pdf', [OrderController::class, 'pdf'])->name('orders.pdf');",
+          "Route::post('/stripe/webhook', [OrderController::class, 'webhook']);",
+        ), routes: [] },
+        { file: 'routes/api.php', source: routeFile("Route::get('/profile', [OrderController::class, 'profile']);"), routes: [] },
+      ].map((file) => ({ ...file, routes: parseRoutes(file.source) })),
+    }));
+    linkRouteFindings(findings, [
+      { file: 'resources/views/admin/layout.blade.php', text: 'x\nwindow.location.href = "{{ route(\'home\') }}/currency/change/" + currency;' },
+      { file: 'resources/views/orders/show.blade.php', text: "<a href=\"{{ route('orders.pdf', $order) }}\">PDF</a>" },
+    ]);
+    const reach = Object.fromEntries(findings.map((finding) => [finding.route?.uri, finding.reach]));
+
+    expect(reach).toEqual({
+      '/currency/change/{currency?}': 'linked',
+      '/subscribe': 'unlinked',
+      '/orders/pdf': 'linked',
+      '/stripe/webhook': 'unknown',
+      '/profile': 'unknown',
+    });
+    expect(findings.find((finding) => finding.route?.uri === '/currency/change/{currency?}')?.linkedFrom).toEqual([
+      { file: 'resources/views/admin/layout.blade.php', line: 2 },
+    ]);
+    expect(findings.find((finding) => finding.route?.uri === '/subscribe')?.message).toContain('probably a leftover');
   });
 });

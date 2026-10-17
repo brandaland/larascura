@@ -429,6 +429,8 @@ interface RouteGroup {
   middleware: string[];
   /** Route::controller(X::class)->group(...): child routes name only the method. */
   controller?: string;
+  /** Route::name('admin.')->group(...) or ['as' => 'admin.'] prefixes child route names. */
+  namePrefix?: string;
 }
 
 // PHP applies `use` imports to X::class but not to strings, so string controller names stay as written.
@@ -510,12 +512,14 @@ const routeGroupsFrom = (source: string, resolve: NameResolver): RouteGroup[] =>
     const arrayMiddleware = /['"]middleware['"]\s*=>\s*(\[[^\]]*\]|['"][^'"]+['"])/.exec(settings);
     if (arrayMiddleware?.[1]) middleware.push(...middlewareFrom(arrayMiddleware[1], resolve));
     const controller = settings.match(/(?:controller\s*\(|['"]controller['"]\s*=>)\s*(?:([\\\w]+)::class|(['"])([\\\w]+)\2)/);
+    const namePrefix = settings.match(/(?:^|->|\b)(?:name|as)\s*\(\s*['"]([^'"]*)['"]|['"]as['"]\s*=>\s*['"]([^'"]*)['"]/);
     groups.push({
       start: openingBrace,
       end,
       prefix: prefix?.[2] ?? prefix?.[4],
       middleware: [...new Set(middleware)],
       controller: controllerName(controller?.[1], controller?.[3], resolve),
+      namePrefix: namePrefix?.[1] ?? namePrefix?.[2],
     });
   };
 
@@ -538,12 +542,13 @@ const routeContext = (
   index: number,
   uri: string,
   middleware: string[],
-): { uri: string; middleware: string[]; controller?: string } => {
+): { uri: string; middleware: string[]; controller?: string; namePrefix: string } => {
   const parents = groups.filter((group) => index > group.start && index < group.end).sort((a, b) => a.start - b.start);
   return {
     uri: joinedUri(...parents.flatMap((group) => (group.prefix ? [group.prefix] : [])), uri),
     middleware: [...new Set([...parents.flatMap((group) => group.middleware), ...middleware])],
     controller: parents.map((group) => group.controller).filter(Boolean).at(-1),
+    namePrefix: parents.map((group) => group.namePrefix ?? '').join(''),
   };
 };
 
@@ -592,20 +597,80 @@ export const parseRoutes = (source: string): ParsedRoute[] => {
   const routes: ParsedRoute[] = [];
   const resolve: NameResolver = (name) => resolveName(name, imports, namespace);
   const groups = routeGroupsFrom(source, resolve);
-  const addRoute = (method: string, uri: string, handler: string, chain: string, index: number): void => {
-    const middlewareCall = /->middleware\s*\(([^)]*)\)/.exec(chain);
+  const routeName = (chain: string, namePrefix: string): string | undefined => {
+    const name = /->name\s*\(\s*['"]([^'"]+)['"]\s*\)/.exec(chain)?.[1];
+    return name ? namePrefix + name : undefined;
+  };
+
+  // Reads a whole `function (...) { ... }` closure (its body may contain ');') and the chain after it.
+  const closureAt = (handlerStart: number, handler: string, callOpen: number):
+    { params: string; body: string; chain?: string; end?: number } | undefined => {
+    const arrow = /^\s*(?:static\s+)?fn\s*\(([^)]*)\)/.exec(handler);
+    if (arrow) {
+      // An arrow body ends where the Route::get( call closes; its own ')->x()' is not the route chain.
+      const callEnd = balancedEnd(source, callOpen);
+      if (callEnd === undefined) return { params: arrow[1] ?? '', body: handler.slice(arrow[0].length) };
+      const tail = /^\s*((?:->[^;]+)?)\s*;/.exec(source.slice(callEnd));
+      return {
+        params: arrow[1] ?? '',
+        body: source.slice(handlerStart + arrow[0].length, callEnd - 1),
+        chain: tail?.[1] ?? '',
+        end: callEnd,
+      };
+    }
+    const head = /^\s*(?:static\s+)?function\s*\(([^)]*)\)[^{;]*\{/.exec(source.slice(handlerStart));
+    if (!head) return undefined;
+    const open = handlerStart + head[0].length - 1;
+    const close = closingBrace(source, open);
+    if (close === undefined) return undefined;
+    const tail = /^\s*\)\s*((?:->[^;]+)?)\s*;/.exec(source.slice(close + 1));
+    return { params: head[1] ?? '', body: source.slice(open + 1, close), chain: tail?.[1] ?? '', end: close };
+  };
+
+  // A closure that only hands over to a class: app(X::class)->m(), (new X)->m(), or a typed X $x then $x->m().
+  const delegatedTarget = (params: string, body: string): Pick<ParsedRoute, 'controller' | 'action'> => {
+    const direct = [
+      /(?:app|resolve)\s*\(\s*([\\\w]+)::class\s*\)\s*->\s*(\w+)\s*\(/,
+      /\(\s*new\s+([\\\w]+)\s*(?:\([^)]*\))?\s*\)\s*->\s*(\w+)\s*\(/,
+      /app\s*\(\s*\)\s*->\s*call\s*\(\s*\[\s*([\\\w]+)::class\s*,\s*['"](\w+)['"]/,
+    ];
+    for (const pattern of direct) {
+      const match = pattern.exec(body);
+      if (match?.[1] && match[2]) return { controller: resolve(match[1]), action: match[2] };
+    }
+    for (const parameter of params.matchAll(/([\\\w]+)\s+\$(\w+)/g)) {
+      if (!parameter[1] || !parameter[2] || !/Controller$/.test(parameter[1])) continue;
+      const call = new RegExp(`\\$${parameter[2]}\\s*->\\s*(\\w+)\\s*\\(`).exec(body);
+      if (call?.[1]) return { controller: resolve(parameter[1]), action: call[1] };
+    }
+    return {};
+  };
+
+  /** Returns where a closure handler ends so the scan can continue after it. */
+  const addRoute = (method: string, uri: string, handler: string, chain: string, index: number, handlerStart: number): number | undefined => {
+    const closure = closureAt(handlerStart, handler, source.indexOf('(', index));
+    const routeChain = closure?.chain ?? chain;
+    const middlewareCall = /->middleware\s*\(([^)]*)\)/.exec(routeChain);
     const context = routeContext(groups, index, uri, middlewareCall?.[1] ? middlewareFrom(middlewareCall[1], resolve) : []);
-    let target = parsedHandler(handler, imports, namespace);
-    // Inside Route::controller(X::class)->group(), a bare 'method' string targets X.
-    const methodOnly = /^\s*(['"])(\w+)\1\s*$/.exec(handler);
-    if (!target.controller && methodOnly?.[2] && context.controller) target = { controller: context.controller, action: methodOnly[2] };
+    let target: Pick<ParsedRoute, 'controller' | 'action'>;
+    if (closure) {
+      target = delegatedTarget(closure.params, closure.body);
+    } else {
+      target = parsedHandler(handler, imports, namespace);
+      // Inside Route::controller(X::class)->group(), a bare 'method' string targets X.
+      const methodOnly = /^\s*(['"])(\w+)\1\s*$/.exec(handler);
+      if (!target.controller && methodOnly?.[2] && context.controller) target = { controller: context.controller, action: methodOnly[2] };
+    }
     routes.push({
       method,
       uri: context.uri,
       ...target,
       middleware: context.middleware,
       line: lineNumber(source, index),
+      ...(closure ? { closure: true } : {}),
+      ...(routeName(routeChain, context.namePrefix) ? { name: routeName(routeChain, context.namePrefix) } : {}),
     });
+    return closure?.end;
   };
   const addResource = (kind: string, name: string, controller: string, chain: string, index: number): void => {
     const only = /->only\s*\(([^)]*)\)/.exec(chain)?.[1];
@@ -623,6 +688,8 @@ export const parseRoutes = (source: string): ParsedRoute[] => {
       ['destroy', 'DELETE', joinedUri(base, `{${parameter}}`)],
     ] as const;
     const middlewareCall = /->middleware\s*\(([^)]*)\)/.exec(chain);
+    // Laravel names resource routes after the resource without its URL prefix: admin/users → users.index.
+    const resourceName = name.slice(name.lastIndexOf('/') + 1);
     for (const [action, method, uri] of definitions) {
       if (kind.startsWith('api') && ['create', 'edit'].includes(action)) continue;
       if (allowed && !allowed.has(action)) continue;
@@ -636,6 +703,7 @@ export const parseRoutes = (source: string): ParsedRoute[] => {
         middleware: context.middleware,
         line: lineNumber(source, index),
         fromResource: true,
+        name: `${context.namePrefix}${resourceName}.${action}`,
       });
     }
   };
@@ -643,14 +711,18 @@ export const parseRoutes = (source: string): ParsedRoute[] => {
   const routePattern = /Route::(get|post|put|patch|delete|options|any)\s*\(\s*(['"])(.*?)\2\s*,\s*([\s\S]*?)\)\s*((?:->[^;]+)?)\s*;/g;
   let match: RegExpExecArray | null;
 
+  const handlerStart = (whole: RegExpExecArray, uri: string, handler: string): number =>
+    whole.index + whole[0].indexOf(handler, whole[0].indexOf(uri) + uri.length);
   while ((match = routePattern.exec(source))) {
-    addRoute((match[1] ?? 'any').toUpperCase(), match[3] ?? '/', match[4] ?? '', match[5] ?? '', match.index);
+    const end = addRoute((match[1] ?? 'any').toUpperCase(), match[3] ?? '/', match[4] ?? '', match[5] ?? '', match.index, handlerStart(match, match[3] ?? '', match[4] ?? ''));
+    if (end !== undefined && end > routePattern.lastIndex) routePattern.lastIndex = end;
   }
 
   const matchPattern = /Route::match\s*\(\s*(\[[^\]]*\])\s*,\s*(['"])(.*?)\2\s*,\s*([\s\S]*?)\)\s*((?:->[^;]+)?)\s*;/g;
   while ((match = matchPattern.exec(source))) {
     const methods = stringsFrom(match[1] ?? '').map((method) => method.toUpperCase()).join('|') || 'MATCH';
-    addRoute(methods, match[3] ?? '/', match[4] ?? '', match[5] ?? '', match.index);
+    const end = addRoute(methods, match[3] ?? '/', match[4] ?? '', match[5] ?? '', match.index, handlerStart(match, match[3] ?? '', match[4] ?? ''));
+    if (end !== undefined && end > matchPattern.lastIndex) matchPattern.lastIndex = end;
   }
 
   const resourcePattern = /Route::(apiResource|resource)\s*\(\s*(['"])(.*?)\2\s*,\s*(?:([\\\w]+)::class|(['"])([\\\w]+)\5)\s*\)\s*((?:->[^;]+)?)\s*;/g;
