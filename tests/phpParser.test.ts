@@ -225,6 +225,23 @@ describe('Laravel PHP syntax parser', () => {
     ]);
   });
 
+  it('ignores PHP built-in classes such as Closure in middleware handle()', () => {
+    const parsed = parsePhpClass('app/Http/Middleware/ApiLang.php', [
+      '<?php',
+      'namespace App\\Http\\Middleware;',
+      'use Closure;',
+      'use App\\Services\\Locale;',
+      'class ApiLang {',
+      '    public function handle(Request $request, Closure $next, \\DateTimeInterface $at, Locale $locale) {}',
+      '}',
+    ].join('\n'));
+
+    expect(parsed?.methodDependencies.map((dependency) => dependency.type)).toEqual([
+      'App\\Http\\Middleware\\Request',
+      'App\\Services\\Locale',
+    ]);
+  });
+
   it('classifies form requests and middleware by convention', () => {
     expect(parsePhpClass('app/Http/Requests/StorePostRequest.php', [
       '<?php', 'namespace App\\Http\\Requests;', 'class StorePostRequest extends FormRequest {}',

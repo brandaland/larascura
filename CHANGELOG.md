@@ -7,6 +7,7 @@
 - Scanned every PSR-4 autoload directory from `composer.json` and the `Modules/` folder, so domain folders and modular projects are mapped; factories, seeders, and tests stay out of the map.
 - Recognized route files inside modules, such as `Modules/Blog/routes/web.php`.
 - Fixed request-flow views pulling in unrelated routes through shared middleware such as `auth:sanctum`. A flow now follows connections forward from its route and only includes the controller action that route calls.
+- Ignored PHP built-in classes such as `Closure` and `DateTime` instead of drawing them as architecture nodes, and resolved fully qualified names like `\DateTimeInterface` correctly.
 - Built the graph quietly in the background on startup so CodeLens works before the map is opened. Turn CodeLens off with `larascura.codeLens`.
 
 ## 0.3.0

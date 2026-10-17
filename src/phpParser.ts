@@ -22,6 +22,35 @@ const scalarTypes = new Set([
   'void',
 ]);
 
+// PHP's own classes are language plumbing (Closure $next, DateTime $at), not architecture.
+const builtinClasses = new Set([
+  'ArrayAccess',
+  'ArrayIterator',
+  'ArrayObject',
+  'BackedEnum',
+  'Closure',
+  'Countable',
+  'DateInterval',
+  'DatePeriod',
+  'DateTime',
+  'DateTimeImmutable',
+  'DateTimeInterface',
+  'DateTimeZone',
+  'Error',
+  'Exception',
+  'Generator',
+  'Iterator',
+  'IteratorAggregate',
+  'JsonSerializable',
+  'SplFileInfo',
+  'Stringable',
+  'Throwable',
+  'Traversable',
+  'UnitEnum',
+  'WeakMap',
+  'stdClass',
+]);
+
 const importsFrom = (source: string): Map<string, string> => {
   const imports = new Map<string, string>();
   const pattern = /^use\s+([^;]+);/gm;
@@ -44,9 +73,11 @@ const namespaceFrom = (source: string): string =>
   source.match(/^namespace\s+([^;]+);/m)?.[1]?.trim() ?? '';
 
 const resolveName = (name: string, imports: Map<string, string>, namespace: string): string => {
-  const cleaned = name.trim().replace(/^\\/, '');
+  const trimmed = name.trim();
+  const cleaned = trimmed.replace(/^\\/, '');
   if (!cleaned || ['self', 'static', 'parent'].includes(cleaned)) return cleaned;
-  if (cleaned.includes('\\')) return cleaned;
+  // A leading backslash (\Closure) or any namespace separator means the name is already fully qualified.
+  if (trimmed.startsWith('\\') || cleaned.includes('\\')) return cleaned;
   return imports.get(cleaned) ?? (namespace ? `${namespace}\\${cleaned}` : cleaned);
 };
 
@@ -245,8 +276,10 @@ export const parsePhpClass = (file: string, source: string): ParsedClass | undef
     if (!isConstructor && !containerResolvedMethod(method, kind)) continue;
     for (const parameter of method.parameters) {
       for (const type of parameter.types) {
+        const resolved = resolveName(type, imports, namespace);
+        if (builtinClasses.has(resolved)) continue;
         const dependency = {
-          type: resolveName(type, imports, namespace),
+          type: resolved,
           variable: parameter.variable,
           line: lineNumber(source, parameter.index),
         };
