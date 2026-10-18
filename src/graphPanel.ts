@@ -1120,6 +1120,12 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       selected = node.id;
       render();
       openInspector(node.label);
+      describeNode(node);
+    }
+
+    // Fills the Inspector with a node's details, without changing the scope or redrawing the map.
+    function describeNode(node) {
+      detailTitle.textContent = node.label;
       detailContent.replaceChildren();
       const badge = text('span', displayKind(node.kind), 'badge');
       badge.style.setProperty('--detail-color', colors[node.kind] || colors.class);
@@ -1494,6 +1500,20 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       const topEdge = place.y * zoomLevel - viewport.scrollTop;
       if (left < 0 || topEdge < 40 || left + nodeWidth * zoomLevel > visibleMapWidth() || topEdge + 260 * zoomLevel > viewport.clientHeight) {
         viewport.scrollTo?.({ left: Math.max(0, place.x * zoomLevel - 60), top: Math.max(0, place.y * zoomLevel - 60), behavior: reduceMotion ? 'auto' : 'smooth' });
+      }
+
+      // The Inspector follows the journey, so it always describes the step being narrated.
+      if (inspectorState === 'open') {
+        if (step.node.synthetic) {
+          detailTitle.textContent = step.node.label;
+          detailContent.replaceChildren();
+          detailContent.style.setProperty('--detail-color', colors[step.node.kind] || colors.class);
+          const badge = text('span', 'response', 'badge');
+          badge.style.setProperty('--detail-color', colors[step.node.kind] || colors.class);
+          detailContent.append(badge, text('h2', step.node.label), section('What is this?', step.text));
+        } else {
+          describeNode(step.node);
+        }
       }
 
       lastRendered = { nodes: steps.map(candidate => candidate.node).filter(node => !node.synthetic), edges: [], truncated: false };

@@ -693,6 +693,8 @@ describe('LaraScura architecture webview', () => {
         'Response · Orders/Index',
       ]);
       expect(document.querySelector('.node.journey-current')?.getAttribute('data-node-id')).toBe('page');
+      // The Inspector describes the step being narrated, not the route the journey started from.
+      expect(document.querySelector('#detailTitle')?.textContent).toBe('Orders/Index');
       expect(document.querySelectorAll('.journey-path.done')).toHaveLength(8);
       expect(document.querySelectorAll('.journey-path.current')).toHaveLength(1);
       // Validation and binding that belong to other actions stay out of this journey.
@@ -702,6 +704,7 @@ describe('LaraScura architecture webview', () => {
       expect(title()).toBe('Listener · LogOrdersView');
       (document.querySelector('[data-node-id="mw:auth"]') as unknown as { click(): void }).click();
       expect(title()).toBe('Middleware · auth');
+      expect(document.querySelector('#detailTitle')?.textContent).toBe('Authenticate');
       expect(document.querySelector('.journey-caption-text')?.textContent).toContain('logged in');
       expect(document.querySelector('.journey-caption-link')?.textContent).toBe('Open in editor ↗');
       expect((document.querySelector('#journeyPacket') as HTMLElement).style.transform).toMatch(/^translate\(/);
@@ -727,6 +730,8 @@ describe('LaraScura architecture webview', () => {
       expect(document.querySelector('.journey-caption-title')?.textContent).toBe('Response');
       expect(document.querySelector('.node.journey-current .node-label')?.textContent).toBe('Back to the browser');
       expect(document.querySelector('.node.journey-current .node-kind')?.textContent).toBe('response');
+      expect(document.querySelector('#detailTitle')?.textContent).toBe('Back to the browser');
+      expect(document.querySelector('#detailContent .badge')?.textContent).toBe('response');
       // There is no source to open for the way back to the browser.
       expect(document.querySelector('.journey-caption-link')).toBeNull();
       dom.window.close();

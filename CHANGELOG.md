@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+- During a Request Journey the Inspector now follows the current step, so it always describes what the caption narrates — the page, the middleware, or the way back to the browser — instead of the route the journey started from.
+
 ## 0.7.0
 
 - **Request Journey.** Pick a route and the map turns into that request's path: its steps laid out in order and numbered — middleware, Form Request validation, route model binding, the controller action, the services it uses, events, listeners and jobs, and finally the Inertia page or the way back to the browser. A glowing packet travels the path, the part already travelled is drawn solid, and a caption attached to the current step explains in plain words what Laravel is doing, with a link to open that code.
