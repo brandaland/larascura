@@ -96,6 +96,11 @@
       {
         "command": "larascura.openFile",
         "title": "LaraScura: Open File"
+      },
+      {
+        "command": "larascura.playJourney",
+        "title": "LaraScura: Play Request Journey",
+        "icon": "$(play)"
       }
     ],
     "viewsContainers": {
@@ -156,6 +161,10 @@
         {
           "command": "larascura.openFile",
           "when": "false"
+        },
+        {
+          "command": "larascura.playJourney",
+          "when": "editorLangId == php"
         }
       ],
       "editor/title": [

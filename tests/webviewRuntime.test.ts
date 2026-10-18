@@ -598,4 +598,124 @@ describe('LaraScura architecture webview', () => {
     expect([...document.querySelectorAll('.section h3')].map((heading) => heading.textContent)).toContain('Probably unused');
     dom.window.close();
   });
+
+  describe('Request Journey', () => {
+    const location = { file: '/workspace/example/app/X.php', line: 1 };
+    const node = (id: string, label: string, kind: ArchitectureGraph['nodes'][number]['kind']) =>
+      ({ id, label, kind, location, summary: '', syntax: '' });
+    const edge = (source: string, target: string, kind: ArchitectureGraph['edges'][number]['kind'], label: string) =>
+      ({ id: `${kind}:${source}->${target}`, source, target, kind, label, location, explanation: '', confidence: 'exact' as const });
+    const open = (withPage: boolean) => {
+      const errors: string[] = [];
+      const virtualConsole = new VirtualConsole();
+      virtualConsole.on('jsdomError', (error) => errors.push(error.message));
+      const dom = new JSDOM(createGraphHtml('test-nonce'), {
+        runScripts: 'dangerously',
+        pretendToBeVisual: true,
+        virtualConsole,
+        beforeParse(window) {
+          Object.assign(window, {
+            acquireVsCodeApi: () => ({ postMessage: () => undefined, getState: () => undefined, setState: () => undefined }),
+          });
+        },
+      });
+      const graph: ArchitectureGraph = {
+        projectName: 'example/app', root: '/workspace/example', sourceDirectories: ['app', 'routes'],
+        generatedAt: new Date(0).toISOString(), warnings: [], findings: [],
+        nodes: [
+          node('route', 'GET /orders', 'route'),
+          node('mw:web', 'web', 'middleware'),
+          node('mw:auth', 'Authenticate', 'middleware'),
+          node('ctrl', 'OrderController', 'controller'),
+          node('req:index', 'IndexOrdersRequest', 'request'),
+          node('req:store', 'StoreOrderRequest', 'request'),
+          node('model', 'Order', 'model'),
+          node('svc', 'OrderService', 'service'),
+          node('job', 'SyncOrdersJob', 'job'),
+          node('event', 'OrdersViewed', 'event'),
+          node('listener', 'LogOrdersView', 'listener'),
+          node('page', 'Orders/Index', 'page'),
+        ],
+        edges: [
+          edge('route', 'mw:web', 'middleware', 'web'),
+          edge('route', 'mw:auth', 'middleware', 'auth'),
+          edge('route', 'ctrl', 'handles', 'index'),
+          edge('ctrl', 'req:index', 'validates', 'index()'),
+          edge('ctrl', 'req:store', 'validates', 'store()'),
+          edge('ctrl', 'model', 'resolves', 'show($order)'),
+          edge('ctrl', 'svc', 'injects', 'injects'),
+          edge('ctrl', 'job', 'dispatches', 'dispatches'),
+          edge('svc', 'event', 'fires', 'fires'),
+          edge('listener', 'event', 'listens', 'listens'),
+          ...(withPage ? [edge('ctrl', 'page', 'renders', 'index()')] : []),
+        ],
+      };
+      dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph } }));
+      return { dom, document: dom.window.document, errors };
+    };
+    const key = (dom: JSDOM, value: string) => dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: value }));
+
+    it('steps through a request in the order Laravel handles it', () => {
+      const { dom, document, errors } = open(true);
+      dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'focus', nodeId: 'route' } }));
+      const start = document.querySelector('#journeyStart') as HTMLElement;
+      expect(start.hidden).toBe(false);
+      (start as unknown as { click(): void }).click();
+
+      const bar = document.querySelector('#journeyBar') as HTMLElement;
+      const title = () => bar.querySelector('.journey-title')?.textContent;
+      const titles: Array<string | null | undefined> = [title()];
+      expect(bar.hidden).toBe(false);
+      expect(bar.querySelector('.journey-head')?.textContent).toBe('Request journey · 1 / 10');
+      expect(document.querySelector('#workspace')?.classList.contains('journey-active')).toBe(true);
+      // Ten presses: nine steps forward, and one more that stays on the last step.
+      for (let press = 0; press < 10; press += 1) {
+        key(dom, 'ArrowRight');
+        titles.push(title());
+      }
+      expect(titles).toEqual([
+        'Request arrives',
+        'Middleware · web',
+        'Middleware · auth',
+        'Validation · IndexOrdersRequest',
+        'OrderController@index',
+        'Uses OrderService',
+        'Job · SyncOrdersJob',
+        'Event · OrdersViewed',
+        'Listener · LogOrdersView',
+        'Response · Orders/Index',
+        'Response · Orders/Index',
+      ]);
+      expect(document.querySelector('.node.journey-current')?.getAttribute('data-node-id')).toBe('page');
+      expect(document.querySelectorAll('.node.journey-done').length).toBeGreaterThan(5);
+      // Validation and binding that belong to other actions stay out of this journey.
+      expect(bar.textContent).not.toContain('StoreOrderRequest');
+
+      key(dom, 'ArrowLeft');
+      expect(title()).toBe('Listener · LogOrdersView');
+      (bar.querySelectorAll('.journey-segment')[2] as unknown as { click(): void }).click();
+      expect(title()).toBe('Middleware · auth');
+      expect(bar.querySelector('.journey-text')?.textContent).toContain('logged in');
+      expect((document.querySelector('#journeyPacket') as HTMLElement).style.transform).toMatch(/^translate\(/);
+
+      key(dom, 'Escape');
+      expect(bar.hidden).toBe(true);
+      expect(document.querySelector('#workspace')?.classList.contains('journey-active')).toBe(false);
+      expect(document.querySelector('.journey-current')).toBeNull();
+      expect(errors).toEqual([]);
+      dom.window.close();
+    });
+
+    it('ends with a generic response when no page is rendered, and starts from the extension message', () => {
+      const { dom, document } = open(false);
+      dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'journey', nodeId: 'route' } }));
+      const bar = document.querySelector('#journeyBar') as HTMLElement;
+      (bar.querySelectorAll('.journey-segment')[9] as unknown as { click(): void }).click();
+
+      expect(bar.querySelector('.journey-head')?.textContent).toBe('Request journey · 10 / 10');
+      expect(bar.querySelector('.journey-title')?.textContent).toBe('Response');
+      expect(document.querySelector('.node.journey-current')?.getAttribute('data-node-id')).toBe('route');
+      dom.window.close();
+    });
+  });
 });

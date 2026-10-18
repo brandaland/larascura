@@ -174,6 +174,7 @@ describe('CodeLens model on a fixture project', () => {
     expect(lenses.filter((lens) => lens.line === 7).map((lens) => lens.title)).toEqual([
       '→ OrderController@store',
       '$(type-hierarchy) Show flow',
+      '$(play) Journey',
     ]);
     expect(lenses.find((lens) => lens.line === 7)?.command).toEqual({
       id: 'larascura.openMethod',

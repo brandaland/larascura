@@ -12,13 +12,14 @@ export class GraphPanel {
   private graph: ArchitectureGraph;
   private readonly onRefresh: () => Promise<ArchitectureGraph>;
   private ready = false;
-  private pendingFocus: string | undefined;
+  private pendingFocus: { nodeId: string; journey: boolean } | undefined;
 
   public static show(
     context: vscode.ExtensionContext,
     graph: ArchitectureGraph,
     onRefresh: () => Promise<ArchitectureGraph>,
     focusNodeId?: string,
+    journey = false,
   ): GraphPanel {
     if (GraphPanel.current) {
       GraphPanel.current.graph = graph;
@@ -26,22 +27,22 @@ export class GraphPanel {
       if (!GraphPanel.current.panel.visible) GraphPanel.current.ready = false;
       GraphPanel.current.panel.reveal(vscode.ViewColumn.One);
       GraphPanel.current.postGraph();
-      if (focusNodeId) GraphPanel.current.focus(focusNodeId);
+      if (focusNodeId) GraphPanel.current.focus(focusNodeId, journey);
       return GraphPanel.current;
     }
 
     GraphPanel.current = new GraphPanel(context, graph, onRefresh);
-    if (focusNodeId) GraphPanel.current.focus(focusNodeId);
+    if (focusNodeId) GraphPanel.current.focus(focusNodeId, journey);
     return GraphPanel.current;
   }
 
   /** Focuses a node once the webview has its graph; earlier requests wait for the ready message. */
-  public focus(nodeId: string): void {
+  public focus(nodeId: string, journey = false): void {
     if (!this.ready) {
-      this.pendingFocus = nodeId;
+      this.pendingFocus = { nodeId, journey };
       return;
     }
-    void this.panel.webview.postMessage({ type: 'focus', nodeId });
+    void this.panel.webview.postMessage({ type: journey ? 'journey' : 'focus', nodeId });
   }
 
   public static updateIfOpen(graph: ArchitectureGraph): boolean {
@@ -76,7 +77,7 @@ export class GraphPanel {
         if (message.type === 'ready') {
           this.ready = true;
           this.postGraph();
-          if (this.pendingFocus) this.focus(this.pendingFocus);
+          if (this.pendingFocus) this.focus(this.pendingFocus.nodeId, this.pendingFocus.journey);
           this.pendingFocus = undefined;
           return;
         }
@@ -238,6 +239,8 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .section p { margin: 0; font-size: 12px; line-height: 1.55; }
     .code { margin-top: 9px; padding: 9px; overflow: auto; color: var(--vscode-textPreformat-foreground); background: var(--vscode-textCodeBlock-background); border-radius: 6px; font-family: var(--vscode-editor-font-family); font-size: 11px; white-space: pre-wrap; }
     .source-button { width: 100%; margin-top: 14px; }
+    .journey-play { margin-top: 8px; color: #fff; background: #7c3aed; }
+    .journey-play:hover { background: #6d28d9; }
     .warning { padding: 8px 10px; color: var(--vscode-editorWarning-foreground); background: var(--vscode-inputValidation-warningBackground); border: 1px solid var(--vscode-inputValidation-warningBorder); border-radius: 6px; font-size: 11px; }
     .doctor-summary { display: grid; width: 100%; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 9px 11px; color: var(--vscode-foreground); background: color-mix(in srgb, var(--doctor-color) 10%, transparent); border: 1px solid color-mix(in srgb, var(--doctor-color) 45%, transparent); border-radius: 8px; font-size: 11px; text-align: left; cursor: pointer; }
     .doctor-summary:hover { background: color-mix(in srgb, var(--doctor-color) 18%, transparent); }
@@ -306,6 +309,31 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .context-item:hover, .context-item:focus-visible { color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground)); background: var(--vscode-menu-selectionBackground, var(--vscode-list-activeSelectionBackground)); outline: none; }
     .context-icon { width: 14px; opacity: .75; text-align: center; }
     .context-separator { height: 1px; margin: 4px 6px; background: var(--vscode-menu-separatorBackground, var(--vscode-panel-border)); }
+    .journey-start { flex-shrink: 0; height: 22px; padding: 0 10px; color: var(--vscode-button-foreground); background: #7c3aed; border: 0; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+    .journey-start:hover { background: #6d28d9; }
+    .journey-start[hidden], .journey-bar[hidden], .journey-packet[hidden] { display: none; }
+    .journey-active .node { opacity: .3; transition: opacity .3s ease, background-color .3s ease, box-shadow .3s ease; }
+    .journey-active .node.journey-done { opacity: .72; }
+    .journey-active .node.journey-current { opacity: 1; background: color-mix(in srgb, var(--node-color) 16%, var(--vscode-editorWidget-background)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--node-color) 28%, transparent), 0 10px 28px rgba(0,0,0,.25); }
+    .journey-active .edge-visible { opacity: .14; }
+    .journey-active .edge-group.journey-edge .edge-visible { stroke: #a78bfa; stroke-width: 2.6; opacity: 1; }
+    .journey-packet { position: absolute; top: 0; left: 0; z-index: 5; width: 14px; height: 14px; border-radius: 50%; background: var(--packet-color, #7c3aed); box-shadow: 0 0 0 4px color-mix(in srgb, var(--packet-color, #7c3aed) 30%, transparent), 0 0 18px var(--packet-color, #7c3aed); pointer-events: none; transition: transform .8s cubic-bezier(.45, 0, .2, 1), background-color .3s ease; }
+    .journey-bar { position: sticky; bottom: 14px; z-index: 6; box-sizing: border-box; padding: 12px 14px; color: var(--vscode-foreground); background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.28); }
+    .journey-head { display: flex; align-items: center; gap: 8px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .journey-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--step-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--step-color) 25%, transparent); }
+    .journey-title { margin: 7px 0 4px; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+    .journey-text { margin: 0; font-size: 12px; line-height: 1.55; }
+    .journey-progress { display: flex; gap: 3px; margin: 11px 0 9px; }
+    .journey-segment { flex: 1; height: 5px; padding: 0; background: color-mix(in srgb, var(--step-color) 22%, transparent); border: 0; border-radius: 3px; cursor: pointer; }
+    .journey-segment.done { background: color-mix(in srgb, var(--step-color) 60%, transparent); }
+    .journey-segment.current { background: var(--step-color); }
+    .journey-controls { display: flex; justify-content: flex-end; gap: 6px; }
+    .journey-control { min-width: 32px; height: 28px; padding: 0 10px; color: var(--vscode-foreground); background: transparent; border: 1px solid var(--vscode-panel-border); border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .journey-control:hover { background: var(--vscode-list-hoverBackground); }
+    .journey-control.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); border-color: transparent; }
+    @media (prefers-reduced-motion: reduce) {
+      .journey-packet, .journey-active .node { transition: none; }
+    }
     .hidden { display: none !important; }
     /* Narrow panels (for example with source open beside): the Inspector becomes a right-hand drawer. */
     @media (max-width: 1050px) {
@@ -342,8 +370,9 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     <div id="workspace" class="workspace">
       <nav id="tree" class="navigator" aria-label="Laravel architecture categories"></nav>
       <main id="viewport" class="viewport" aria-label="Laravel architecture graph">
-        <div id="scopeBar" class="scope-bar"><span>Scope</span><span id="scopeName" class="scope-name">Overview</span><span id="scopeNote" class="scope-note"></span></div>
-        <div id="stage" class="stage"><svg id="edges" class="edges" aria-hidden="true"></svg><div id="nodes"></div></div>
+        <div id="scopeBar" class="scope-bar"><span>Scope</span><span id="scopeName" class="scope-name">Overview</span><button id="journeyStart" class="journey-start" type="button" title="Step through how Laravel handles this request" hidden>▶ Request journey</button><span id="scopeNote" class="scope-note"></span></div>
+        <div id="stage" class="stage"><svg id="edges" class="edges" aria-hidden="true"></svg><div id="nodes"></div><div id="journeyPacket" class="journey-packet" hidden></div></div>
+        <div id="journeyBar" class="journey-bar" role="region" aria-label="Request journey" aria-live="polite" hidden></div>
       </main>
       <aside id="detail" class="detail" aria-live="polite">
         <header class="detail-toolbar">
@@ -667,6 +696,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     }
 
     function activateScope(nextScope) {
+      stopJourney();
       scope = nextScope;
       selected = null;
       search.value = '';
@@ -1042,6 +1072,8 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
           ? visible.length + ' nodes · select one to show direct connections'
           : visible.length + ' nodes · ' + current.edges.length + ' connections';
       stats.textContent = visible.length + '/' + graph.nodes.length + ' nodes';
+      journeyStart.hidden = scope.type !== 'route' || Boolean(search.value.trim());
+      renderJourney();
     }
 
     function section(title, body, code) {
@@ -1100,6 +1132,12 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         section('Source', node.location.file + ':' + node.location.line),
         sourceButton('node', node.id)
       );
+      if (node.kind === 'route') {
+        const play = text('button', '▶ Play request journey', 'tool-button source-button journey-play');
+        play.type = 'button';
+        play.addEventListener('click', () => startJourney(node.id));
+        detailContent.append(play);
+      }
     }
 
     function degreeMeter(incomingCount, outgoingCount) {
@@ -1187,9 +1225,229 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       detailContent.append(...content);
     }
 
+    // Request Journey: steps through how Laravel handles one route, in the order it really happens.
+    const journeyBar = document.getElementById('journeyBar');
+    const journeyPacket = document.getElementById('journeyPacket');
+    const journeyStart = document.getElementById('journeyStart');
+    const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const journeyStepDelay = 2600;
+    let journey = null;
+
+    const middlewareLessons = {
+      auth: 'Checks that the user is logged in. Guests are sent to the login page, so the controller never runs for them.',
+      guest: 'Lets only logged-out visitors through; signed-in users are sent away, for example from the login page.',
+      verified: 'Requires a verified email address before the user can continue.',
+      throttle: 'Counts requests and turns away a client that sends too many too quickly, with a 429 response.',
+      can: 'Asks a policy or gate whether this user may do this; if not, Laravel answers 403.',
+      signed: 'Accepts the request only if the URL carries a valid signature, so the link cannot be tampered with.',
+      web: 'The web group starts the session, shares validation errors, checks the CSRF token and encrypts cookies.',
+      api: 'The api group handles stateless requests, usually with rate limiting and token authentication.'
+    };
+
+    function methodOf(edge) {
+      const open = edge.label.indexOf('(');
+      return open > 0 ? edge.label.slice(0, open) : null;
+    }
+
+    function journeySteps(route) {
+      const byId = new Map(graph.nodes.map(node => [node.id, node]));
+      const from = (id, kind) => graph.edges.filter(edge => edge.source === id && edge.kind === kind);
+      const steps = [{
+        node: route,
+        title: 'Request arrives',
+        text: route.label + ' reaches Laravel. The router compares the HTTP method and URL with every route and picks this one.'
+      }];
+      const add = (node, edge, title, text) => {
+        if (node && !steps.some(step => step.node.id === node.id)) steps.push({ node, edge, title, text });
+      };
+
+      for (const edge of from(route.id, 'middleware')) {
+        const node = byId.get(edge.target);
+        const alias = edge.label.split(':')[0];
+        add(node, edge, 'Middleware · ' + edge.label, middlewareLessons[alias]
+          || (node ? node.label : alias) + ' runs before the controller. Middleware can inspect the request, change it, or stop it with a redirect or an error.');
+      }
+
+      let page = from(route.id, 'renders').map(edge => ({ edge, node: byId.get(edge.target) }))[0];
+      const handle = from(route.id, 'handles')[0];
+      const controller = handle ? byId.get(handle.target) : null;
+      if (controller) {
+        const action = handle.label;
+        const forAction = edge => { const method = methodOf(edge); return !method || method === action; };
+        for (const edge of from(controller.id, 'validates').filter(forAction)) {
+          const request = byId.get(edge.target);
+          add(request, edge, 'Validation · ' + (request ? request.label : ''), 'Before ' + action + '() runs, Laravel validates the input with this Form Request and calls authorize(). If anything fails, the user goes back with the errors and the controller never runs.');
+        }
+        for (const edge of from(controller.id, 'resolves').filter(forAction)) {
+          const model = byId.get(edge.target);
+          add(model, edge, 'Route model binding · ' + (model ? model.label : ''), 'Laravel reads the ID from the URL and loads the matching ' + (model ? model.label : 'record') + ' from the database. If none exists, it answers 404 on its own.');
+        }
+        add(controller, handle, controller.label + '@' + action, 'The controller action runs. Its job is to coordinate: take the validated input, call the code that does the work, and choose the response.');
+        const workers = [controller];
+        for (const edge of from(controller.id, 'injects').filter(forAction)) {
+          const service = byId.get(edge.target);
+          if (!service) continue;
+          add(service, edge, 'Uses ' + service.label, 'The service container builds ' + service.label + ' and hands it over, because its type is declared in the constructor or the method signature.');
+          workers.push(service);
+        }
+        for (const worker of workers) {
+          for (const edge of from(worker.id, 'fires')) {
+            const event = byId.get(edge.target);
+            if (!event) continue;
+            add(event, edge, 'Event · ' + event.label, worker.label + ' announces that something happened. It does not need to know who reacts.');
+            for (const listen of graph.edges.filter(candidate => candidate.kind === 'listens' && candidate.target === event.id)) {
+              const listener = byId.get(listen.source);
+              add(listener, listen, 'Listener · ' + (listener ? listener.label : ''), 'Reacts to ' + event.label + ', for example by sending an email. Listeners keep side effects out of the controller.');
+            }
+          }
+          for (const edge of from(worker.id, 'dispatches')) {
+            const job = byId.get(edge.target);
+            add(job, edge, 'Job · ' + (job ? job.label : ''), 'Pushed onto the queue, so slow work runs in the background and the user does not wait for it.');
+          }
+        }
+        page = page || from(controller.id, 'renders').filter(forAction).map(edge => ({ edge, node: byId.get(edge.target) }))[0];
+      }
+
+      if (page && page.node) {
+        add(page.node, page.edge, 'Response · ' + page.node.label, 'Inertia sends the props as JSON and the browser renders the ' + page.node.label + ' page. This is the screen the user finally sees.');
+      } else {
+        steps.push({
+          node: route,
+          response: true,
+          title: 'Response',
+          text: (controller ? controller.label : 'The route') + ' returns a response, such as a view, a redirect or JSON, and Laravel sends it back through the middleware to the browser.'
+        });
+      }
+      return steps;
+    }
+
+    function startJourney(routeId) {
+      const route = graph ? graph.nodes.find(node => node.id === routeId && node.kind === 'route') : null;
+      if (!route) return;
+      focusNode(route.id);
+      const steps = journeySteps(route).filter(step => positions.has(step.node.id));
+      if (!steps.length) return;
+      journey = { steps, index: 0, playing: !reduceMotion, timer: null };
+      workspace.classList.add('journey-active');
+      renderJourney();
+      if (journey.playing) scheduleJourney();
+    }
+
+    function stopJourney() {
+      if (!journey) return;
+      clearTimeout(journey.timer);
+      journey = null;
+      workspace.classList.remove('journey-active');
+      journeyBar.hidden = true;
+      journeyPacket.hidden = true;
+      nodesRoot.querySelectorAll('.journey-current, .journey-done').forEach(element => element.classList.remove('journey-current', 'journey-done'));
+      edgesRoot.querySelectorAll('.journey-edge').forEach(element => element.classList.remove('journey-edge'));
+    }
+
+    function scheduleJourney() {
+      clearTimeout(journey.timer);
+      journey.timer = setTimeout(() => {
+        if (!journey || !journey.playing) return;
+        if (journey.index < journey.steps.length - 1) {
+          journey.index += 1;
+          renderJourney();
+          scheduleJourney();
+        } else {
+          journey.playing = false;
+          renderJourney();
+        }
+      }, journeyStepDelay);
+    }
+
+    function goJourney(index) {
+      if (!journey) return;
+      journey.index = Math.max(0, Math.min(index, journey.steps.length - 1));
+      renderJourney();
+      if (journey.playing) scheduleJourney();
+    }
+
+    function toggleJourney() {
+      if (!journey) return;
+      journey.playing = !journey.playing;
+      if (journey.playing && journey.index >= journey.steps.length - 1) journey.index = 0;
+      renderJourney();
+      if (journey.playing) scheduleJourney();
+      else clearTimeout(journey.timer);
+    }
+
+    function journeyControl(label, title, run, primary) {
+      const button = text('button', label, 'journey-control' + (primary ? ' primary' : ''));
+      button.type = 'button';
+      button.title = title;
+      button.setAttribute('aria-label', title);
+      button.addEventListener('click', run);
+      return button;
+    }
+
+    // Re-applies highlights after render() rebuilds the nodes, and moves the packet to the current step.
+    function renderJourney() {
+      if (!journey) return;
+      const step = journey.steps[journey.index];
+      const color = colors[step.node.kind] || colors.class;
+      for (const element of nodesRoot.querySelectorAll('.node')) {
+        const index = journey.steps.findIndex(candidate => candidate.node.id === element.dataset.nodeId);
+        element.classList.toggle('journey-current', element.dataset.nodeId === step.node.id);
+        element.classList.toggle('journey-done', index !== -1 && index < journey.index && element.dataset.nodeId !== step.node.id);
+      }
+      for (const group of edgesRoot.querySelectorAll('.edge-group')) {
+        group.classList.toggle('journey-edge', Boolean(step.edge) && group.getAttribute('data-edge-id') === step.edge.id);
+      }
+      const position = positions.get(step.node.id);
+      if (position) {
+        journeyPacket.hidden = false;
+        journeyPacket.style.setProperty('--packet-color', color);
+        // The packet sits on the node's colored left edge, where connections attach, so it never covers the label.
+        journeyPacket.style.transform = 'translate(' + (position.x - 7) + 'px, ' + (position.y + 22) + 'px)';
+        const left = position.x * zoomLevel - viewport.scrollLeft;
+        const top = position.y * zoomLevel - viewport.scrollTop;
+        if (left < 0 || top < 40 || left + nodeWidth * zoomLevel > visibleMapWidth() || top + 80 > viewport.clientHeight - 160) {
+          viewport.scrollTo?.({ left: position.x * zoomLevel - visibleMapWidth() / 2 + nodeWidth / 2, top: position.y * zoomLevel - 120, behavior: reduceMotion ? 'auto' : 'smooth' });
+        }
+      }
+
+      journeyBar.replaceChildren();
+      journeyBar.hidden = false;
+      const width = Math.max(260, Math.min(600, visibleMapWidth() - 28));
+      journeyBar.style.width = width + 'px';
+      journeyBar.style.left = Math.max(14, (visibleMapWidth() - width) / 2) + 'px';
+      const head = document.createElement('div');
+      head.className = 'journey-head';
+      const dot = text('span', '', 'journey-dot');
+      dot.style.setProperty('--step-color', color);
+      head.append(dot, text('span', 'Request journey · ' + (journey.index + 1) + ' / ' + journey.steps.length));
+      const progress = document.createElement('div');
+      progress.className = 'journey-progress';
+      journey.steps.forEach((candidate, index) => {
+        const segment = text('button', '', 'journey-segment' + (index === journey.index ? ' current' : index < journey.index ? ' done' : ''));
+        segment.type = 'button';
+        segment.title = (index + 1) + '. ' + candidate.title;
+        segment.setAttribute('aria-label', segment.title);
+        segment.style.setProperty('--step-color', colors[candidate.node.kind] || colors.class);
+        segment.addEventListener('click', () => goJourney(index));
+        progress.append(segment);
+      });
+      const controls = document.createElement('div');
+      controls.className = 'journey-controls';
+      controls.append(
+        journeyControl('◀', 'Previous step', () => goJourney(journey.index - 1)),
+        journeyControl(journey.playing ? '❚❚' : '▶', journey.playing ? 'Pause' : 'Play', toggleJourney, true),
+        journeyControl('▶▶', 'Next step', () => goJourney(journey.index + 1)),
+        journeyControl('✕', 'End the journey', stopJourney)
+      );
+      journeyBar.append(head, text('div', step.title, 'journey-title'), text('p', step.text, 'journey-text'), progress, controls);
+    }
+
+    journeyStart.addEventListener('click', () => { if (scope.type === 'route') startJourney(scope.value); });
+
     function focusNode(nodeId) {
       const node = graph?.nodes.find(candidate => candidate.id === nodeId);
       if (!node) return;
+      stopJourney();
       search.value = '';
       scope = node.kind === 'route' ? { type: 'route', value: node.id } : { type: 'node', value: node.id };
       renderTree();
@@ -1315,6 +1573,10 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         focusNode(event.data.nodeId);
         return;
       }
+      if (event.data?.type === 'journey') {
+        startJourney(event.data.nodeId);
+        return;
+      }
       if (event.data?.type !== 'graph') return;
       graph = event.data.graph;
       // "Vue Pages" says at a glance that this layer is what users see, and in which framework.
@@ -1389,7 +1651,10 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         return [{ icon: '▸', label: 'Open ' + (kindLabels[node.aggregateKind] || node.aggregateKind), run: () => activateScope({ type: 'kind', value: node.aggregateKind }) }, 'separator', ...canvasItems()];
       }
       const items = [];
-      if (node.kind === 'route') items.push({ icon: '⇢', label: 'Show request flow', run: () => focusNode(node.id) });
+      if (node.kind === 'route') {
+        items.push({ icon: '▶', label: 'Play request journey', run: () => startJourney(node.id) });
+        items.push({ icon: '⇢', label: 'Show request flow', run: () => focusNode(node.id) });
+      }
       items.push({ icon: '✳', label: 'Show direct connections', run: () => {
         search.value = '';
         scope = { type: 'node', value: node.id };
@@ -1424,6 +1689,12 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       if (event.key === 'Escape' && !contextMenu.hidden) {
         hideContextMenu();
         return;
+      }
+      if (journey && event.target !== search) {
+        if (event.key === 'ArrowRight') { goJourney(journey.index + 1); event.preventDefault(); return; }
+        if (event.key === 'ArrowLeft') { goJourney(journey.index - 1); event.preventDefault(); return; }
+        if (event.key === ' ') { toggleJourney(); event.preventDefault(); return; }
+        if (event.key === 'Escape') { stopJourney(); return; }
       }
       if (event.key === 'Escape' && inspectorState !== 'closed') setInspectorState('closed');
     });

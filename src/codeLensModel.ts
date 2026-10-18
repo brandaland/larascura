@@ -7,6 +7,7 @@ export interface LensEntry {
   tooltip: string;
   command:
     | { id: 'larascura.revealInMap'; nodeId: string }
+    | { id: 'larascura.playJourney'; nodeId: string }
     | { id: 'larascura.openMethod'; file: string; method: string }
     | { id: 'larascura.openFile'; file: string; line: number };
 }
@@ -78,6 +79,12 @@ export const codeLensEntries = (graph: ArchitectureGraph, file: string, text: st
       title: '$(type-hierarchy) Show flow',
       tooltip: 'Show this request flow in the LaraScura map',
       command: { id: 'larascura.revealInMap', nodeId: routes[0]!.id },
+    });
+    entries.push({
+      line,
+      title: '$(play) Journey',
+      tooltip: 'Step through how Laravel handles this request',
+      command: { id: 'larascura.playJourney', nodeId: routes[0]!.id },
     });
   }
 

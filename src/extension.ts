@@ -253,6 +253,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       GraphPanel.show(context, current, refreshMap, target);
     }),
     vscode.commands.registerCommand('larascura.openMethod', openMethod),
+    vscode.commands.registerCommand('larascura.playJourney', async (nodeId?: string) => {
+      const current = graph ?? (await scanWithUi());
+      if (!current) return;
+      const editor = vscode.window.activeTextEditor;
+      const route = nodeId
+        ? current.nodes.find((node) => node.id === nodeId)
+        : editor && nodeAtCursor(current, editor.document.uri.fsPath, editor.selection.active.line + 1);
+      if (!route || route.kind !== 'route') {
+        void vscode.window.showInformationMessage('Put the cursor on a route in a routes file to play its request journey.');
+        return;
+      }
+      GraphPanel.show(context, current, refreshMap, route.id, true);
+    }),
     vscode.commands.registerCommand('larascura.openFile', (file: string, line: number) => openFileAt(file, () => line)),
     vscode.commands.registerCommand('larascura.openMap', async () => {
       const current = graph ?? (await scanWithUi());
