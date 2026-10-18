@@ -655,19 +655,25 @@ describe('LaraScura architecture webview', () => {
     };
     const key = (dom: JSDOM, value: string) => dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: value }));
 
-    it('steps through a request in the order Laravel handles it', () => {
+    it('lays the route out as a numbered path and narrates each step on the canvas', () => {
       const { dom, document, errors } = open(true);
       dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'focus', nodeId: 'route' } }));
       const start = document.querySelector('#journeyStart') as HTMLElement;
       expect(start.hidden).toBe(false);
       (start as unknown as { click(): void }).click();
 
-      const bar = document.querySelector('#journeyBar') as HTMLElement;
-      const title = () => bar.querySelector('.journey-title')?.textContent;
-      const titles: Array<string | null | undefined> = [title()];
-      expect(bar.hidden).toBe(false);
-      expect(bar.querySelector('.journey-head')?.textContent).toBe('Request journey · 1 / 10');
+      const controls = document.querySelector('#journeyControls') as HTMLElement;
+      const title = () => document.querySelector('.journey-caption-title')?.textContent;
+      expect(controls.hidden).toBe(false);
+      expect(start.hidden).toBe(true);
+      expect(controls.querySelector('.journey-count')?.textContent).toBe('1 / 10');
+      expect([...document.querySelectorAll('.journey-step')].map((badge) => badge.textContent)).toEqual(
+        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'],
+      );
+      expect(document.querySelectorAll('.journey-path')).toHaveLength(9);
       expect(document.querySelector('#workspace')?.classList.contains('journey-active')).toBe(true);
+
+      const titles: Array<string | null | undefined> = [title()];
       // Ten presses: nine steps forward, and one more that stays on the last step.
       for (let press = 0; press < 10; press += 1) {
         key(dom, 'ArrowRight');
@@ -687,34 +693,42 @@ describe('LaraScura architecture webview', () => {
         'Response · Orders/Index',
       ]);
       expect(document.querySelector('.node.journey-current')?.getAttribute('data-node-id')).toBe('page');
-      expect(document.querySelectorAll('.node.journey-done').length).toBeGreaterThan(5);
+      expect(document.querySelectorAll('.journey-path.done')).toHaveLength(8);
+      expect(document.querySelectorAll('.journey-path.current')).toHaveLength(1);
       // Validation and binding that belong to other actions stay out of this journey.
-      expect(bar.textContent).not.toContain('StoreOrderRequest');
+      expect(document.querySelector('[data-node-id="req:store"]')).toBeNull();
 
       key(dom, 'ArrowLeft');
       expect(title()).toBe('Listener · LogOrdersView');
-      (bar.querySelectorAll('.journey-segment')[2] as unknown as { click(): void }).click();
+      (document.querySelector('[data-node-id="mw:auth"]') as unknown as { click(): void }).click();
       expect(title()).toBe('Middleware · auth');
-      expect(bar.querySelector('.journey-text')?.textContent).toContain('logged in');
+      expect(document.querySelector('.journey-caption-text')?.textContent).toContain('logged in');
+      expect(document.querySelector('.journey-caption-link')?.textContent).toBe('Open in editor ↗');
       expect((document.querySelector('#journeyPacket') as HTMLElement).style.transform).toMatch(/^translate\(/);
 
       key(dom, 'Escape');
-      expect(bar.hidden).toBe(true);
+      expect(controls.hidden).toBe(true);
+      expect(document.querySelector('.journey-caption')).toBeNull();
+      expect(document.querySelector('.journey-step')).toBeNull();
       expect(document.querySelector('#workspace')?.classList.contains('journey-active')).toBe(false);
-      expect(document.querySelector('.journey-current')).toBeNull();
+      // The normal layered map is back, with the route's flow.
+      expect(document.querySelector('[data-node-id="ctrl"]')).not.toBeNull();
       expect(errors).toEqual([]);
       dom.window.close();
     });
 
-    it('ends with a generic response when no page is rendered, and starts from the extension message', () => {
+    it('ends at the browser when no page is rendered, and starts from the extension message', () => {
       const { dom, document } = open(false);
       dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'journey', nodeId: 'route' } }));
-      const bar = document.querySelector('#journeyBar') as HTMLElement;
-      (bar.querySelectorAll('.journey-segment')[9] as unknown as { click(): void }).click();
+      const steps = [...document.querySelectorAll('.node')];
+      (steps[steps.length - 1] as unknown as { click(): void }).click();
 
-      expect(bar.querySelector('.journey-head')?.textContent).toBe('Request journey · 10 / 10');
-      expect(bar.querySelector('.journey-title')?.textContent).toBe('Response');
-      expect(document.querySelector('.node.journey-current')?.getAttribute('data-node-id')).toBe('route');
+      expect(document.querySelector('.journey-count')?.textContent).toBe('10 / 10');
+      expect(document.querySelector('.journey-caption-title')?.textContent).toBe('Response');
+      expect(document.querySelector('.node.journey-current .node-label')?.textContent).toBe('Back to the browser');
+      expect(document.querySelector('.node.journey-current .node-kind')?.textContent).toBe('response');
+      // There is no source to open for the way back to the browser.
+      expect(document.querySelector('.journey-caption-link')).toBeNull();
       dom.window.close();
     });
   });

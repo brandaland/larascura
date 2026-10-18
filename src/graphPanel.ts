@@ -315,25 +315,31 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .journey-start { flex-shrink: 0; height: 22px; padding: 0 10px; color: var(--vscode-button-foreground); background: #7c3aed; border: 0; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer; }
     .journey-start:hover { background: #6d28d9; }
     .journey-start[hidden], .journey-bar[hidden], .journey-packet[hidden] { display: none; }
-    .journey-active .node { opacity: .3; transition: opacity .3s ease, background-color .3s ease, box-shadow .3s ease; }
-    .journey-active .node.journey-done { opacity: .72; }
+    .journey-start[hidden], .journey-controls[hidden] { display: none; }
+    .journey-active .node { opacity: .42; transition: opacity .3s ease, background-color .3s ease, box-shadow .3s ease; cursor: pointer; }
+    .journey-active .node.journey-done { opacity: 1; }
     .journey-active .node.journey-current { opacity: 1; background: color-mix(in srgb, var(--node-color) 16%, var(--vscode-editorWidget-background)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--node-color) 28%, transparent), 0 10px 28px rgba(0,0,0,.25); }
-    .journey-active .edge-visible { opacity: .14; }
-    .journey-active .edge-group.journey-edge .edge-visible { stroke: #a78bfa; stroke-width: 2.6; opacity: 1; }
+    .journey-step { position: absolute; top: -10px; left: -10px; display: grid; width: 20px; height: 20px; place-items: center; color: var(--vscode-foreground); background: var(--vscode-editorWidget-background); border: 2px solid var(--node-color); border-radius: 50%; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .journey-current .journey-step { color: #fff; background: var(--node-color); }
+    .journey-path { fill: none; stroke-width: 2.4; stroke-linecap: round; }
+    .journey-path.done { stroke: #a78bfa; }
+    .journey-path.current { stroke: #7c3aed; stroke-width: 3.2; }
+    .journey-path.upcoming { stroke: var(--vscode-descriptionForeground); stroke-dasharray: 5 7; opacity: .45; }
     .journey-packet { position: absolute; top: 0; left: 0; z-index: 5; width: 14px; height: 14px; border-radius: 50%; background: var(--packet-color, #7c3aed); box-shadow: 0 0 0 4px color-mix(in srgb, var(--packet-color, #7c3aed) 30%, transparent), 0 0 18px var(--packet-color, #7c3aed); pointer-events: none; transition: transform .8s cubic-bezier(.45, 0, .2, 1), background-color .3s ease; }
-    .journey-bar { position: sticky; bottom: 14px; z-index: 6; box-sizing: border-box; padding: 12px 14px; color: var(--vscode-foreground); background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.28); }
-    .journey-head { display: flex; align-items: center; gap: 8px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
-    .journey-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--step-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--step-color) 25%, transparent); }
-    .journey-title { margin: 7px 0 4px; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
-    .journey-text { margin: 0; font-size: 12px; line-height: 1.55; }
-    .journey-progress { display: flex; gap: 3px; margin: 11px 0 9px; }
-    .journey-segment { flex: 1; height: 5px; padding: 0; background: color-mix(in srgb, var(--step-color) 22%, transparent); border: 0; border-radius: 3px; cursor: pointer; }
-    .journey-segment.done { background: color-mix(in srgb, var(--step-color) 60%, transparent); }
-    .journey-segment.current { background: var(--step-color); }
-    .journey-controls { display: flex; justify-content: flex-end; gap: 6px; }
-    .journey-control { min-width: 32px; height: 28px; padding: 0 10px; color: var(--vscode-foreground); background: transparent; border: 1px solid var(--vscode-panel-border); border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .journey-packet[hidden] { display: none; }
+    /* The narration sits on the canvas, tied to the step it explains. */
+    .journey-caption { position: absolute; z-index: 4; box-sizing: border-box; width: 340px; padding: 12px 14px; color: var(--vscode-foreground); background: var(--vscode-editorWidget-background); border: 1px solid color-mix(in srgb, #7c3aed 45%, transparent); border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.2); }
+    .journey-caption-tail { position: absolute; top: -23px; width: 2px; height: 22px; background: #7c3aed; }
+    .journey-caption-eyebrow { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .journey-caption-title { margin: 5px 0 4px; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+    .journey-caption-text { margin: 0; font-size: 12px; line-height: 1.55; }
+    .journey-caption-link { margin-top: 8px; padding: 0; color: var(--vscode-textLink-foreground); background: none; border: 0; font-size: 11px; cursor: pointer; }
+    .journey-caption-link:hover { text-decoration: underline; }
+    .journey-controls { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; }
+    .journey-control { min-width: 26px; height: 22px; padding: 0 7px; color: var(--vscode-foreground); background: transparent; border: 1px solid var(--vscode-panel-border); border-radius: 5px; font-size: 11px; cursor: pointer; }
     .journey-control:hover { background: var(--vscode-list-hoverBackground); }
-    .journey-control.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); border-color: transparent; }
+    .journey-control.primary { color: #fff; background: #7c3aed; border-color: transparent; }
+    .journey-count { min-width: 44px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 11px; text-align: center; }
     @media (prefers-reduced-motion: reduce) {
       .journey-packet, .journey-active .node { transition: none; }
     }
@@ -373,9 +379,8 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     <div id="workspace" class="workspace">
       <nav id="tree" class="navigator" aria-label="Laravel architecture categories"></nav>
       <main id="viewport" class="viewport" aria-label="Laravel architecture graph">
-        <div id="scopeBar" class="scope-bar"><span>Scope</span><span id="scopeName" class="scope-name">Overview</span><button id="journeyStart" class="journey-start" type="button" title="Step through how Laravel handles this request" hidden>▶ Request journey</button><span id="scopeNote" class="scope-note"></span></div>
+        <div id="scopeBar" class="scope-bar"><span>Scope</span><span id="scopeName" class="scope-name">Overview</span><button id="journeyStart" class="journey-start" type="button" title="Step through how Laravel handles this request" hidden>▶ Request journey</button><span id="journeyControls" class="journey-controls" role="group" aria-label="Request journey controls" hidden></span><span id="scopeNote" class="scope-note"></span></div>
         <div id="stage" class="stage"><svg id="edges" class="edges" aria-hidden="true"></svg><div id="nodes"></div><div id="journeyPacket" class="journey-packet" hidden></div></div>
-        <div id="journeyBar" class="journey-bar" role="region" aria-label="Request journey" aria-live="polite" hidden></div>
       </main>
       <aside id="detail" class="detail" aria-live="polite">
         <header class="detail-toolbar">
@@ -1013,6 +1018,10 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       nodesRoot.replaceChildren();
       edgesRoot.replaceChildren();
       positions = new Map();
+      if (journey) {
+        renderJourneyStage();
+        return;
+      }
       const current = scopedGraph();
       lastRendered = current;
       const visible = current.nodes;
@@ -1076,7 +1085,6 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
           : visible.length + ' nodes · ' + current.edges.length + ' connections';
       stats.textContent = visible.length + '/' + graph.nodes.length + ' nodes';
       journeyStart.hidden = scope.type !== 'route' || Boolean(search.value.trim());
-      renderJourney();
     }
 
     function section(title, body, code) {
@@ -1229,7 +1237,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     }
 
     // Request Journey: steps through how Laravel handles one route, in the order it really happens.
-    const journeyBar = document.getElementById('journeyBar');
+    const journeyControls = document.getElementById('journeyControls');
     const journeyPacket = document.getElementById('journeyPacket');
     const journeyStart = document.getElementById('journeyStart');
     const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1315,8 +1323,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         add(page.node, page.edge, 'Response · ' + page.node.label, 'Inertia sends the props as JSON and the browser renders the ' + page.node.label + ' page. This is the screen the user finally sees.');
       } else {
         steps.push({
-          node: route,
-          response: true,
+          node: { id: 'journey:response', label: 'Back to the browser', kind: 'route', synthetic: true, location: null },
           title: 'Response',
           text: (controller ? controller.label : 'The route') + ' returns a response, such as a view, a redirect or JSON, and Laravel sends it back through the middleware to the browser.'
         });
@@ -1327,12 +1334,15 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     function startJourney(routeId) {
       const route = graph ? graph.nodes.find(node => node.id === routeId && node.kind === 'route') : null;
       if (!route) return;
-      focusNode(route.id);
-      const steps = journeySteps(route).filter(step => positions.has(step.node.id));
-      if (!steps.length) return;
-      journey = { steps, index: 0, playing: !reduceMotion, timer: null };
+      stopJourney();
+      search.value = '';
+      scope = { type: 'route', value: route.id };
+      selected = route.id;
+      renderTree();
+      journey = { route, steps: journeySteps(route), index: 0, playing: !reduceMotion, timer: null };
       workspace.classList.add('journey-active');
-      renderJourney();
+      render();
+      viewport.scrollTo?.(0, 0);
       if (journey.playing) scheduleJourney();
     }
 
@@ -1341,10 +1351,9 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       clearTimeout(journey.timer);
       journey = null;
       workspace.classList.remove('journey-active');
-      journeyBar.hidden = true;
       journeyPacket.hidden = true;
-      nodesRoot.querySelectorAll('.journey-current, .journey-done').forEach(element => element.classList.remove('journey-current', 'journey-done'));
-      edgesRoot.querySelectorAll('.journey-edge').forEach(element => element.classList.remove('journey-edge'));
+      journeyControls.hidden = true;
+      render();
     }
 
     function scheduleJourney() {
@@ -1353,11 +1362,11 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         if (!journey || !journey.playing) return;
         if (journey.index < journey.steps.length - 1) {
           journey.index += 1;
-          renderJourney();
+          render();
           scheduleJourney();
         } else {
           journey.playing = false;
-          renderJourney();
+          render();
         }
       }, journeyStepDelay);
     }
@@ -1365,7 +1374,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     function goJourney(index) {
       if (!journey) return;
       journey.index = Math.max(0, Math.min(index, journey.steps.length - 1));
-      renderJourney();
+      render();
       if (journey.playing) scheduleJourney();
     }
 
@@ -1373,7 +1382,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       if (!journey) return;
       journey.playing = !journey.playing;
       if (journey.playing && journey.index >= journey.steps.length - 1) journey.index = 0;
-      renderJourney();
+      render();
       if (journey.playing) scheduleJourney();
       else clearTimeout(journey.timer);
     }
@@ -1387,62 +1396,118 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       return button;
     }
 
-    // Re-applies highlights after render() rebuilds the nodes, and moves the packet to the current step.
-    function renderJourney() {
-      if (!journey) return;
-      const step = journey.steps[journey.index];
-      const color = colors[step.node.kind] || colors.class;
-      for (const element of nodesRoot.querySelectorAll('.node')) {
-        const index = journey.steps.findIndex(candidate => candidate.node.id === element.dataset.nodeId);
-        element.classList.toggle('journey-current', element.dataset.nodeId === step.node.id);
-        element.classList.toggle('journey-done', index !== -1 && index < journey.index && element.dataset.nodeId !== step.node.id);
-      }
-      for (const group of edgesRoot.querySelectorAll('.edge-group')) {
-        group.classList.toggle('journey-edge', Boolean(step.edge) && group.getAttribute('data-edge-id') === step.edge.id);
-      }
-      const position = positions.get(step.node.id);
-      if (position) {
-        journeyPacket.hidden = false;
-        journeyPacket.style.setProperty('--packet-color', color);
-        // The packet sits on the node's colored left edge, where connections attach, so it never covers the label.
-        journeyPacket.style.transform = 'translate(' + (position.x - 7) + 'px, ' + (position.y + 22) + 'px)';
-        const left = position.x * zoomLevel - viewport.scrollLeft;
-        const top = position.y * zoomLevel - viewport.scrollTop;
-        if (left < 0 || top < 40 || left + nodeWidth * zoomLevel > visibleMapWidth() || top + 80 > viewport.clientHeight - 160) {
-          viewport.scrollTo?.({ left: position.x * zoomLevel - visibleMapWidth() / 2 + nodeWidth / 2, top: position.y * zoomLevel - 120, behavior: reduceMotion ? 'auto' : 'smooth' });
+    // Journey mode replaces the layered map with the route's own path: the steps in order, snaking
+    // left to right and back, joined by one line, with the narration attached to the current step.
+    function renderJourneyStage() {
+      const steps = journey.steps;
+      // Room for the U-turn on the right edge of the last column.
+      const available = Math.max(360, visibleMapWidth() / zoomLevel - 24);
+      const stepX = nodeWidth + 74;
+      const rowStepY = 250;
+      const top = 64;
+      const perRow = Math.max(1, Math.floor((available - padX * 2 - nodeWidth) / stepX) + 1);
+      const places = steps.map((step, index) => {
+        const row = Math.floor(index / perRow);
+        const column = index % perRow;
+        const slot = row % 2 === 0 ? column : perRow - 1 - column;
+        return { x: padX + slot * stepX, y: top + row * rowStepY, row };
+      });
+
+      for (let index = 1; index < steps.length; index += 1) {
+        const from = places[index - 1];
+        const to = places[index];
+        let d;
+        if (from.row === to.row) {
+          const forward = to.x > from.x;
+          const y = from.y + 29;
+          d = 'M ' + (forward ? from.x + nodeWidth : from.x) + ' ' + y + ' L ' + (forward ? to.x : to.x + nodeWidth) + ' ' + y;
+        } else {
+          // A U-turn around the outer side of the row keeps the space under each step free for the caption.
+          const onRight = from.row % 2 === 0;
+          const edge = onRight ? from.x + nodeWidth : from.x;
+          const bulge = onRight ? edge + 28 : edge - 28;
+          d = 'M ' + edge + ' ' + (from.y + 29) + ' C ' + bulge + ' ' + (from.y + 29) + ', ' + bulge + ' ' + (to.y + 29) + ', ' + edge + ' ' + (to.y + 29);
         }
+        const path = document.createElementNS(svgNs, 'path');
+        path.setAttribute('class', 'journey-path ' + (index < journey.index ? 'done' : index === journey.index ? 'current' : 'upcoming'));
+        path.setAttribute('d', d);
+        edgesRoot.appendChild(path);
       }
 
-      journeyBar.replaceChildren();
-      journeyBar.hidden = false;
-      const width = Math.max(260, Math.min(600, visibleMapWidth() - 28));
-      journeyBar.style.width = width + 'px';
-      journeyBar.style.left = Math.max(14, (visibleMapWidth() - width) / 2) + 'px';
-      const head = document.createElement('div');
-      head.className = 'journey-head';
-      const dot = text('span', '', 'journey-dot');
-      dot.style.setProperty('--step-color', color);
-      head.append(dot, text('span', 'Request journey · ' + (journey.index + 1) + ' / ' + journey.steps.length));
-      const progress = document.createElement('div');
-      progress.className = 'journey-progress';
-      journey.steps.forEach((candidate, index) => {
-        const segment = text('button', '', 'journey-segment' + (index === journey.index ? ' current' : index < journey.index ? ' done' : ''));
-        segment.type = 'button';
-        segment.title = (index + 1) + '. ' + candidate.title;
-        segment.setAttribute('aria-label', segment.title);
-        segment.style.setProperty('--step-color', colors[candidate.node.kind] || colors.class);
-        segment.addEventListener('click', () => goJourney(index));
-        progress.append(segment);
+      steps.forEach((step, index) => {
+        const place = places[index];
+        positions.set(step.node.id, place);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'node' + (index === journey.index ? ' journey-current' : index < journey.index ? ' journey-done' : '');
+        button.style.left = place.x + 'px';
+        button.style.top = place.y + 'px';
+        button.style.setProperty('--node-color', colors[step.node.kind] || colors.class);
+        button.dataset.nodeId = step.node.id;
+        button.title = step.title;
+        button.append(
+          text('span', step.node.synthetic ? 'response' : displayKind(step.node.kind), 'node-kind'),
+          text('span', step.node.label, 'node-label'),
+          text('span', String(index + 1), 'journey-step')
+        );
+        button.addEventListener('click', () => goJourney(index));
+        nodesRoot.appendChild(button);
       });
-      const controls = document.createElement('div');
-      controls.className = 'journey-controls';
-      controls.append(
+
+      const step = steps[journey.index];
+      const place = places[journey.index];
+      const captionWidth = 340;
+      const captionX = Math.max(padX, Math.min(place.x, available - padX - captionWidth));
+      const caption = document.createElement('div');
+      caption.className = 'journey-caption';
+      caption.setAttribute('aria-live', 'polite');
+      caption.style.left = captionX + 'px';
+      caption.style.top = (place.y + 58 + 22) + 'px';
+      const tail = text('span', '', 'journey-caption-tail');
+      tail.style.left = (place.x + 24 - captionX) + 'px';
+      caption.append(
+        tail,
+        text('div', 'Step ' + (journey.index + 1) + ' of ' + steps.length, 'journey-caption-eyebrow'),
+        text('div', step.title, 'journey-caption-title'),
+        text('p', step.text, 'journey-caption-text')
+      );
+      if (!step.node.synthetic && step.node.location) {
+        const link = text('button', 'Open in editor ↗', 'journey-caption-link');
+        link.type = 'button';
+        link.addEventListener('click', () => vscode.postMessage({ type: 'openNode', nodeId: step.node.id }));
+        caption.append(link);
+      }
+      nodesRoot.appendChild(caption);
+
+      journeyPacket.hidden = false;
+      journeyPacket.style.setProperty('--packet-color', colors[step.node.kind] || colors.class);
+      // The packet sits on the node's colored left edge, where the path arrives, so it never covers the label.
+      journeyPacket.style.transform = 'translate(' + (place.x - 7) + 'px, ' + (place.y + 22) + 'px)';
+
+      const width = Math.max(available, ...places.map(candidate => candidate.x + nodeWidth + padX), captionX + captionWidth + padX);
+      const height = Math.max(400, ...places.map(candidate => candidate.y + 58 + 230));
+      stage.style.width = width + 'px';
+      stage.style.height = height + 'px';
+      edgesRoot.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+
+      const left = place.x * zoomLevel - viewport.scrollLeft;
+      const topEdge = place.y * zoomLevel - viewport.scrollTop;
+      if (left < 0 || topEdge < 40 || left + nodeWidth * zoomLevel > visibleMapWidth() || topEdge + 260 * zoomLevel > viewport.clientHeight) {
+        viewport.scrollTo?.({ left: Math.max(0, place.x * zoomLevel - 60), top: Math.max(0, place.y * zoomLevel - 60), behavior: reduceMotion ? 'auto' : 'smooth' });
+      }
+
+      lastRendered = { nodes: steps.map(candidate => candidate.node).filter(node => !node.synthetic), edges: [], truncated: false };
+      scopeName.textContent = journey.route.label;
+      scopeNote.textContent = steps.length + ' steps · click a step to jump to it';
+      journeyStart.hidden = true;
+      journeyControls.hidden = false;
+      journeyControls.replaceChildren(
         journeyControl('◀', 'Previous step', () => goJourney(journey.index - 1)),
         journeyControl(journey.playing ? '❚❚' : '▶', journey.playing ? 'Pause' : 'Play', toggleJourney, true),
         journeyControl('▶▶', 'Next step', () => goJourney(journey.index + 1)),
+        text('span', (journey.index + 1) + ' / ' + steps.length, 'journey-count'),
         journeyControl('✕', 'End the journey', stopJourney)
       );
-      journeyBar.append(head, text('div', step.title, 'journey-title'), text('p', step.text, 'journey-text'), progress, controls);
     }
 
     journeyStart.addEventListener('click', () => { if (scope.type === 'route') startJourney(scope.value); });

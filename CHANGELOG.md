@@ -2,9 +2,8 @@
 
 ## Unreleased
 
-- **Request Journey.** Pick a route and watch the request travel through the app: middleware in order, Form Request validation, route model binding, the controller action, the services it uses, events, listeners and jobs, and finally the Inertia page or the response. Each step explains in plain words what Laravel is doing, and a glowing packet moves along the map while upcoming steps stay dimmed.
-- Start it from the *Request journey* button in the scope bar, *Play request journey* in the Inspector or the right-click menu, the `Journey` CodeLens above a route, or **LaraScura: Play Request Journey**.
-- Play and pause, step with the arrow keys or the progress bar, and press Esc to leave. With reduced motion turned on in the operating system, the journey highlights steps without animating.
+- **Request Journey.** Pick a route and the map turns into that request's path: its steps laid out in order and numbered — middleware, Form Request validation, route model binding, the controller action, the services it uses, events, listeners and jobs, and finally the Inertia page or the way back to the browser. A glowing packet travels the path, the part already travelled is drawn solid, and a caption attached to the current step explains in plain words what Laravel is doing, with a link to open that code.
+- Start it from the *Request journey* button in the scope bar, *Play request journey* in the Inspector or the right-click menu, the `Journey` CodeLens above a route, or **LaraScura: Play Request Journey**. Compact controls in the scope bar play, pause and step; click any step to jump to it; use the arrow keys, Space and Esc. With reduced motion turned on in the operating system, the journey highlights steps without animating.
 - Unused Inertia pages are easier to spot: a rose dashed outline and a crossed `✕ unused` badge, while the left strip keeps the page's own color.
 
 ## 0.6.5
