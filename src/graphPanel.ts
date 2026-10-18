@@ -209,8 +209,11 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .node:focus-visible { outline: 2px solid var(--node-color); outline-offset: 2px; }
     .node-kind { display: block; margin-bottom: 4px; color: var(--node-color); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
     .node-label { display: block; overflow: hidden; font-size: 12px; font-weight: 650; line-height: 1.3; text-overflow: ellipsis; }
-    .node.unused { opacity: .72; border-style: dashed; }
-    .node-badge { position: absolute; top: 7px; right: 8px; padding: 0 6px; border: 1px dashed var(--vscode-descriptionForeground); border-radius: 999px; color: var(--vscode-descriptionForeground); font-size: 9px; font-weight: 600; letter-spacing: .04em; line-height: 15px; text-transform: lowercase; }
+    /* Unused pages: a rose dashed outline and a crossed badge; the left strip keeps the page's own color. */
+    .node.unused { --unused-color: #e11d48; opacity: .85; border-style: dashed; border-color: color-mix(in srgb, var(--unused-color) 55%, transparent); border-left-color: var(--node-color); }
+    body.vscode-dark .node.unused, body.vscode-high-contrast .node.unused { --unused-color: #fb7185; }
+    .node-badge { position: absolute; top: 7px; right: 8px; padding: 0 7px 0 6px; border: 1px solid color-mix(in srgb, var(--unused-color, #e11d48) 45%, transparent); border-radius: 999px; color: var(--unused-color, #e11d48); background: color-mix(in srgb, var(--unused-color, #e11d48) 12%, transparent); font-size: 9px; font-weight: 700; letter-spacing: .04em; line-height: 15px; text-transform: lowercase; }
+    .node-badge::before { content: '✕'; margin-right: 4px; font-weight: 800; }
     .column-label { position: absolute; top: 18px; width: 172px; color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-align: center; text-transform: uppercase; }
     .detail { min-width: 0; overflow-y: auto; border-left: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
     .detail.closed { display: none; }
