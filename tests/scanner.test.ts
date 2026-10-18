@@ -129,6 +129,7 @@ describe('Inertia on a fixture project', () => {
     const pages = graph.nodes.filter((node) => node.kind === 'page');
 
     expect(pages.filter((node) => !node.external).map((node) => node.label).sort()).toEqual(['About', 'Dashboard', 'Orders/Index']);
+    expect(graph.pageFramework).toBe('Vue');
     expect(pages.find((node) => node.label === 'Orders/Index')?.syntax).toBe('Props declared with defineProps: orders, filters?');
 
     const renders = graph.edges.filter((edge) => edge.kind === 'renders');

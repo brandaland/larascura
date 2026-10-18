@@ -211,6 +211,17 @@ const inertiaPagesOf = async (root: vscode.Uri, token?: vscode.CancellationToken
   return { known: false, pages };
 };
 
+/** The framework most Inertia pages are written in, from their file extensions. */
+export const pageFrameworkOf = (files: string[]): string | undefined => {
+  const names: Record<string, string> = { vue: 'Vue', tsx: 'React', jsx: 'React', svelte: 'Svelte' };
+  const counts = new Map<string, number>();
+  for (const file of files) {
+    const framework = names[file.split('.').pop() ?? ''];
+    if (framework) counts.set(framework, (counts.get(framework) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
+};
+
 export class LaravelScanner {
   public async scan(root: vscode.Uri, token?: vscode.CancellationToken): Promise<ArchitectureGraph> {
     const lang = language();
@@ -634,6 +645,7 @@ export class LaravelScanner {
       projectName,
       root: root.fsPath,
       sourceDirectories: directories,
+      pageFramework: pageFrameworkOf([...inertia.pages.values()].map((page) => page.file)),
       generatedAt: new Date().toISOString(),
       nodes: [...nodes.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label)),
       edges: [...edges.values()],

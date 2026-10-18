@@ -1,3 +1,4 @@
+import { Script } from 'node:vm';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -7,6 +8,14 @@ import { createGraphHtml } from '../src/graphPanel.js';
 import type { ArchitectureGraph } from '../src/types.js';
 
 describe('LaraScura architecture webview', () => {
+  // The script lives in a TypeScript template literal, where '\n' or '\\w' silently change meaning.
+  it('ships a webview script that parses as JavaScript', () => {
+    const html = createGraphHtml('test-nonce');
+    const script = /<script nonce="test-nonce">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '';
+    expect(script.length).toBeGreaterThan(1000);
+    expect(() => new Script(script)).not.toThrow();
+  });
+
   it('renders the category tree and aggregate overview after receiving a graph', async () => {
     const errors: string[] = [];
     const messages: unknown[] = [];
@@ -569,6 +578,14 @@ describe('LaraScura architecture webview', () => {
     expect(document.querySelector('.connection')?.textContent).toBe('←rendersOrderController');
     expect([...document.querySelectorAll('.layer-button .nav-label')].map((label) => label.textContent)).toEqual(['Controllers', 'Pages']);
     expect(document.querySelector('.node-badge')).toBeNull();
+
+    graph.pageFramework = 'Vue';
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph } }));
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'focus', nodeId: 'page:Orders/Index' } }));
+    const pagesLayer = [...document.querySelectorAll('.layer-button')].find((button) => button.textContent?.includes('Pages'));
+    expect(pagesLayer?.querySelector('.nav-label')?.textContent).toBe('Vue Pages');
+    expect(pagesLayer?.getAttribute('title')).toBe('Vue Pages · 1\nWhat the user sees: Inertia pages rendered in the browser.');
+    expect(document.querySelector('[data-node-id="page:Orders/Index"] .node-kind')?.textContent).toBe('vue page');
 
     graph.nodes[1]!.unused = true;
     dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph } }));

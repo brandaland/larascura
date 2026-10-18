@@ -84,6 +84,8 @@ export interface ArchitectureGraph {
   projectName: string;
   root: string;
   sourceDirectories: string[];
+  /** Framework of the Inertia pages (Vue, React, Svelte), used to name the pages layer. */
+  pageFramework?: string;
   generatedAt: string;
   nodes: ArchitectureNode[];
   edges: ArchitectureEdge[];

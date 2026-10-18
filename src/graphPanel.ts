@@ -619,6 +619,28 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       };
     }
 
+    // One line per layer, shown when hovering it in the navigator.
+    const kindDescriptions = {
+      route: 'Where a request enters: an HTTP method and a URL.',
+      middleware: 'Checks that run before the controller: authentication, throttling, locale…',
+      request: 'Form Requests that validate and authorize input before the action runs.',
+      controller: 'Receives the request and decides what happens next.',
+      page: 'What the user sees: Inertia pages rendered in the browser.',
+      service: 'Reusable business logic shared by controllers and jobs.',
+      repository: 'Classes that hide how data is stored and fetched.',
+      provider: 'Service providers that register bindings when the app boots.',
+      model: 'Eloquent models: database tables and their relationships.',
+      event: 'Something that happened, announced so other code can react.',
+      listener: 'Code that reacts when an event is fired.',
+      job: 'Work pushed to the queue to run in the background.',
+      command: 'Artisan commands run from the terminal or the scheduler.',
+      class: 'Other PHP classes without a specific Laravel role.'
+    };
+
+    function displayKind(kind) {
+      return kind === 'page' && graph?.pageFramework ? graph.pageFramework.toLowerCase() + ' page' : kind;
+    }
+
     // The order a request travels through a Laravel app; the navigator and spectrum follow it.
     const lifecycleOrder = ['route', 'middleware', 'request', 'controller', 'page', 'service', 'repository', 'provider', 'model', 'event', 'listener', 'job', 'command', 'class'];
     const methodColors = { GET: '#22c55e', HEAD: '#22c55e', POST: '#3b82f6', PUT: '#f59e0b', PATCH: '#f59e0b', DELETE: '#ef4444', OPTIONS: '#94a3b8', ANY: '#94a3b8' };
@@ -727,7 +749,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'layer-button' + (isActiveScope(nextScope) ? ' active' : '');
-        button.title = (kindLabels[kind] || kind) + ' · ' + count;
+        button.title = (kindLabels[kind] || kind) + ' · ' + count + (kindDescriptions[kind] ? '\\n' + kindDescriptions[kind] : '');
         button.style.setProperty('--layer-color', colors[kind] || colors.class);
         const bar = text('span', '', 'layer-bar');
         const fill = document.createElement('span');
@@ -911,7 +933,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         band.forEach((group, index) => {
           const rowsPerColumn = Math.max(1, Math.ceil(group.nodes.length / spans[index]));
           bandRows = Math.max(bandRows, rowsPerColumn);
-          labels.push({ text: group.kinds.join(' / '), x: padX + column * step, y: bandTop - 36, width: (spans[index] - 1) * step + nodeWidth });
+          labels.push({ text: group.kinds.map(displayKind).join(' / '), x: padX + column * step, y: bandTop - 36, width: (spans[index] - 1) * step + nodeWidth });
           group.nodes.forEach((node, nodeIndex) => {
             placements.push({
               node,
@@ -959,7 +981,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         button.style.top = y + 'px';
         button.style.setProperty('--node-color', colors[node.kind] || colors.class);
         button.dataset.nodeId = node.id;
-        button.append(text('span', node.kind, 'node-kind'), text('span', node.label, 'node-label'));
+        button.append(text('span', displayKind(node.kind), 'node-kind'), text('span', node.label, 'node-label'));
         if (node.unused) {
           button.classList.add('unused');
           const badge = text('span', 'unused', 'node-badge');
@@ -1029,7 +1051,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       render();
       openInspector(node.label);
       detailContent.replaceChildren();
-      const badge = text('span', node.kind, 'badge');
+      const badge = text('span', displayKind(node.kind), 'badge');
       badge.style.setProperty('--detail-color', colors[node.kind] || colors.class);
       detailContent.style.setProperty('--detail-color', colors[node.kind] || colors.class);
       const incoming = graph.edges.filter(edge => edge.target === node.id);
@@ -1268,6 +1290,8 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       }
       if (event.data?.type !== 'graph') return;
       graph = event.data.graph;
+      // "Vue Pages" says at a glance that this layer is what users see, and in which framework.
+      kindLabels.page = graph.pageFramework ? graph.pageFramework + ' Pages' : 'Pages';
       document.title = 'LaraScura — ' + graph.projectName;
       renderTree();
       render();

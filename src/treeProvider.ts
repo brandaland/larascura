@@ -60,7 +60,7 @@ export class ArchitectureTreeProvider implements vscode.TreeDataProvider<TreeEnt
     }
     if (element.type === 'group') {
       const item = new vscode.TreeItem(
-        `${labels[element.kind] ?? element.kind} (${element.count})`,
+        `${element.kind === 'page' && this.graph?.pageFramework ? `${this.graph.pageFramework} Pages` : labels[element.kind] ?? element.kind} (${element.count})`,
         vscode.TreeItemCollapsibleState.Collapsed,
       );
       item.iconPath = new vscode.ThemeIcon(icons[element.kind]);

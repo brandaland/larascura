@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3
+
+- The pages layer is named after the framework it detects: *Vue Pages*, *React Pages* or *Svelte Pages*, and page nodes read `VUE PAGE`, so it is clear at a glance that this is what users see.
+- Hovering a layer in the navigator explains it in one line, for example *Middleware: checks that run before the controller*.
+
 ## 0.6.2
 
 - Hovered and selected nodes now take a light tint of their own color instead of a second outline. Keyboard focus keeps its outline.
