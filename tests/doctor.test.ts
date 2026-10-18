@@ -291,9 +291,21 @@ describe('LaraScura Doctor', () => {
     });
 
     it('explains a page name that differs only in letter case', () => {
-      const findings = diagnose(input({ inertia: inertia({ renders: render(['orders'], 'orders/index') }) }));
+      const findings = diagnose(input({ inertia: inertia({ renders: render(['orders'], 'orders/index') }) }))
+        .filter((finding) => finding.code === 'missing-page');
       expect(findings).toEqual([expect.objectContaining({ code: 'missing-page', replacement: 'Orders/Index' })]);
       expect(findings[0]?.message).toContain('case-sensitive Linux servers');
+    });
+
+    it('lists pages nothing renders, but not child components or when page names are dynamic', () => {
+      const pages = new Map([
+        ['Orders/Index', page(['orders', true])],
+        ['CartPage', { file: 'resources/js/Pages/CartPage.vue', props: undefined }],
+        ['Checkout/components/Alerts', { file: 'resources/js/Pages/Checkout/components/Alerts.vue', props: undefined }],
+      ]);
+      const unused = diagnose(input({ inertia: inertia({ pages, renders: render(['orders']) }) }));
+      expect(unused).toEqual([expect.objectContaining({ code: 'unused-page', severity: 'information', file: 'resources/js/Pages/CartPage.vue' })]);
+      expect(diagnose(input({ inertia: inertia({ pages, renders: render(['orders']), dynamicPageNames: true }) }))).toEqual([]);
     });
 
     it('does not judge missing pages when no pages folder was found', () => {

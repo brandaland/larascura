@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- LaraScura Doctor lists Inertia pages that no controller, route or closure renders as *probably unused* tips. It stays quiet when a page name is passed in a variable, and leaves child components under `Pages/components` alone.
+- Unused pages carry a small dashed `unused` badge on the map and a note in the Inspector.
+
 ## 0.6.0
 
 - **Inertia + Vue support.** Inertia pages appear as their own *Pages* layer, right after controllers, so a request flow now ends where users see it: `GET /orders → auth → OrderController@index → Orders/Index`. The pages folder is read from `import.meta.glob(...)` in your app entry, with `resources/js/Pages` and `resources/js/pages` as fallbacks.

@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { ambiguousClassNames, createClassNameIndex, resolveClassName } from './classResolver.js';
 import { inertiaRenders, pageDirectoryFrom, sharedProps, vuePageProps, type PageProps } from './inertia.js';
 import { kindSummary, lineNumber, parseMiddlewareAliases, parsePhpClass, parseRoutes } from './phpParser.js';
-import { diagnose, linkRouteFindings } from './doctor.js';
+import { diagnose, isChildComponent, linkRouteFindings } from './doctor.js';
 import { isRouteFile, phpGlob, sourceDirectories } from './projectLayout.js';
 import type {
   ArchitectureEdge,
@@ -357,7 +357,7 @@ export class LaravelScanner {
     for (const [name, page] of inertia.pages) {
       // Child components kept under Pages/ (components, partials, layouts) are not pages; they get a node
       // only if something renders them.
-      if (/(^|\/)(components|partials|layouts|shared|composables|ui)\//i.test(name)) continue;
+      if (isChildComponent(name)) continue;
       nodes.set(nodeId('page', name), {
         id: nodeId('page', name),
         label: name,
@@ -608,9 +608,15 @@ export class LaravelScanner {
           // Without a custom HandleInertiaRequests, Inertia shares only validation errors.
           shared: sharedInertiaProps ?? { keys: ['errors'], complete: true },
           renders: inertiaCalls,
+          dynamicPageNames: [...[...classes.values()].map(({ source }) => source), ...routeFiles.map(({ source }) => source)]
+            .some((source) => /(?:Inertia::render|(?<![\w:>$])inertia)\s*\(\s*\$/.test(source)),
         },
       })
       : [];
+    for (const finding of findings.filter((candidate) => candidate.code === 'unused-page')) {
+      const page = [...nodes.values()].find((node) => node.kind === 'page' && node.location.file === finding.file);
+      if (page) page.unused = true;
+    }
     if (findings.some((finding) => finding.route)) {
       const resourceFiles = await vscode.workspace.findFiles(
         new vscode.RelativePattern(root, 'resources/**/*.{php,js,ts,jsx,tsx,vue}'),

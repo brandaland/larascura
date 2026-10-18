@@ -19,6 +19,8 @@ export interface DoctorInput {
     pages: Map<string, { file: string; props?: PageProps }>;
     shared: { keys: string[]; complete: boolean };
     renders: Array<{ file: string; line: number; page: string; props?: string[] }>;
+    /** Some render passes the page name in a variable, so any page could be in use. */
+    dynamicPageNames?: boolean;
   };
 }
 
@@ -348,8 +350,26 @@ const diagnoseInertia = (inertia: NonNullable<DoctorInput['inertia']>): Finding[
       });
     }
   }
+  // A page no scanned code renders is probably a leftover; packages such as Jetstream may still render it.
+  if (inertia.pagesKnown && !inertia.dynamicPageNames) {
+    const rendered = new Set(inertia.renders.map((render) => render.page));
+    for (const [name, page] of inertia.pages) {
+      if (rendered.has(name) || isChildComponent(name)) continue;
+      findings.push({
+        file: page.file,
+        line: page.props?.line ?? 1,
+        severity: 'information',
+        code: 'unused-page',
+        message: `No controller, route or closure renders the Inertia page "${name}", so it is probably unused. If a package (Jetstream, Fortify) renders it, keep it.`,
+      });
+    }
+  }
   return findings;
 };
+
+/** Components, partials and layouts kept under Pages/ are not pages of their own. */
+export const isChildComponent = (pageName: string): boolean =>
+  /(^|\/)(components|partials|layouts|shared|composables|ui)\//i.test(pageName);
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

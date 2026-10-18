@@ -46,6 +46,8 @@ export interface ArchitectureNode {
   external?: boolean;
   /** Inertia page props read from defineProps. */
   props?: Array<{ name: string; required: boolean }>;
+  /** Set from a Doctor finding: nothing in the scanned code renders this page. */
+  unused?: boolean;
 }
 
 export interface ArchitectureEdge {
@@ -65,7 +67,7 @@ export interface Finding {
   line: number;
   severity: 'warning' | 'information';
   code: 'missing-action' | 'missing-invoke' | 'resource-actions' | 'missing-controller' | 'unknown-middleware'
-    | 'missing-model' | 'duplicate-route' | 'missing-view' | 'namespace-case' | 'missing-page' | 'inertia-props';
+    | 'missing-model' | 'duplicate-route' | 'missing-view' | 'namespace-case' | 'missing-page' | 'inertia-props' | 'unused-page';
   message: string;
   /** The text in the line the finding is about; the editor underlines it. */
   token?: string;

@@ -568,6 +568,13 @@ describe('LaraScura architecture webview', () => {
     expect(document.querySelector('.prop-chip.required')?.textContent).toBe('orders');
     expect(document.querySelector('.connection')?.textContent).toBe('←rendersOrderController');
     expect([...document.querySelectorAll('.layer-button .nav-label')].map((label) => label.textContent)).toEqual(['Controllers', 'Pages']);
+    expect(document.querySelector('.node-badge')).toBeNull();
+
+    graph.nodes[1]!.unused = true;
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph } }));
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'focus', nodeId: 'page:Orders/Index' } }));
+    expect(document.querySelector('.node.unused .node-badge')?.textContent).toBe('unused');
+    expect([...document.querySelectorAll('.section h3')].map((heading) => heading.textContent)).toContain('Probably unused');
     dom.window.close();
   });
 });

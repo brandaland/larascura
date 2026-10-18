@@ -141,6 +141,13 @@ describe('Inertia on a fixture project', () => {
     expect(pages.find((node) => node.label === 'Dashbaord')?.external).toBe(true);
   });
 
+  it('marks pages nothing renders as unused', async () => {
+    const graph = await scanFixture();
+    // DashboardController asks for the misspelled "Dashbaord", so the real Dashboard page is never rendered.
+    expect(graph.nodes.filter((node) => node.unused).map((node) => node.label)).toEqual(['Dashboard']);
+    expect(graph.findings.filter((finding) => finding.code === 'unused-page').map((finding) => path.basename(finding.file))).toEqual(['Dashboard.vue']);
+  });
+
   it('reports the missing page and the misspelled prop with quick fixes', async () => {
     const graph = await scanFixture();
     const inertia = graph.findings.filter((finding) => finding.code === 'missing-page' || finding.code === 'inertia-props');

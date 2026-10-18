@@ -203,6 +203,8 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .node:hover, .node:focus-visible, .node.active { outline: 2px solid var(--node-color); outline-offset: 2px; }
     .node-kind { display: block; margin-bottom: 4px; color: var(--node-color); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
     .node-label { display: block; overflow: hidden; font-size: 12px; font-weight: 650; line-height: 1.3; text-overflow: ellipsis; }
+    .node.unused { opacity: .72; border-style: dashed; }
+    .node-badge { position: absolute; top: 7px; right: 8px; padding: 0 6px; border: 1px dashed var(--vscode-descriptionForeground); border-radius: 999px; color: var(--vscode-descriptionForeground); font-size: 9px; font-weight: 600; letter-spacing: .04em; line-height: 15px; text-transform: lowercase; }
     .column-label { position: absolute; top: 18px; width: 172px; color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-align: center; text-transform: uppercase; }
     .detail { min-width: 0; overflow-y: auto; border-left: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
     .detail.closed { display: none; }
@@ -953,6 +955,12 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         button.style.setProperty('--node-color', colors[node.kind] || colors.class);
         button.dataset.nodeId = node.id;
         button.append(text('span', node.kind, 'node-kind'), text('span', node.label, 'node-label'));
+        if (node.unused) {
+          button.classList.add('unused');
+          const badge = text('span', 'unused', 'node-badge');
+          badge.title = 'Nothing in the scanned code renders this page';
+          button.append(badge);
+        }
         makeDraggable(button, node, current, visibleIds);
         nodesRoot.appendChild(button);
       }
@@ -1028,6 +1036,9 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         degreeMeter(incoming.length, outgoing.length),
         section('What is this?', node.summary)
       );
+      if (node.unused) {
+        detailContent.append(section('Probably unused', 'No controller, route or closure in the scanned code renders this page. If a package such as Jetstream renders it, keep it; otherwise it may be safe to remove.'));
+      }
       if (node.props?.length) detailContent.append(propsSection(node.props));
       if (incoming.length || outgoing.length) detailContent.append(connectionSection(incoming, outgoing));
       detailContent.append(
