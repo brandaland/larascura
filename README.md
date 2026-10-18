@@ -26,6 +26,7 @@ LaraScura was created for people who understand systems better through flows and
 - Detects jobs and events dispatched from classes
 - Maps service-container bindings
 - Classifies controllers, services, repositories, models, jobs, events, listeners, providers, and commands
+- **Request Journey:** pick a route and step through how Laravel handles it, from middleware to the page the user sees, with each step explained in plain words
 - Opens the exact source line from every node and connection
 - **Inertia + Vue:** maps every page, shows which controller renders it and the props it expects, and catches missing pages and mismatched props
 - **LaraScura Doctor** finds missing controller methods and views, misspelled middleware, missing models, and duplicate routes, with "Did you mean…?" quick fixes
@@ -81,7 +82,7 @@ Marketplace identifier: `ooll.larascura`
 
 ~~~bash
 npm run package:vsix
-code --install-extension larascura-0.6.5.vsix
+code --install-extension larascura-0.7.0.vsix
 ~~~
 
 ## Static-analysis boundaries
@@ -106,7 +107,7 @@ LaraScura's goal is to make Laravel easier to learn by showing how a request rea
 
 ### Next: 1.0, *See a request travel*
 
-- **Request Journey.** Pick a route and step through it: middleware, validation, controller, services, events, the page or response. Each step explains in plain words what Laravel is doing.
+- ✅ **Request Journey** — shipped in `0.7.0`: pick a route and step through middleware, validation, controller, services, events and the page, each step explained in plain words.
 - **Learning mode.** Show only the flow you are studying, with explanations written for people new to Laravel.
 - **Explain Selection, rebuilt.** Fifty common Laravel patterns explained in context, each linked to the official documentation.
 - **Coverage.** Blade views and Livewire components; Policy, Observer, Notification, Mail, API Resource and scheduled-task nodes; dependencies resolved through `app()` and facades.
