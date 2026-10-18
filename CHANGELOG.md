@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2
+
+- Hovered and selected nodes now take a light tint of their own color instead of a second outline. Keyboard focus keeps its outline.
+
 ## 0.6.1
 
 - LaraScura Doctor lists Inertia pages that no controller, route or closure renders as *probably unused* tips. It stays quiet when a page name is passed in a variable, and leaves child components under `Pages/components` alone.

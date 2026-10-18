@@ -200,7 +200,12 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .edge-group:hover .edge-visible, .edge-group:focus .edge-visible { stroke: #a78bfa; stroke-width: 2.4; opacity: 1; }
     .node { position: absolute; width: 172px; min-height: 58px; padding: 9px 10px; text-align: left; color: var(--vscode-foreground); background: var(--vscode-editorWidget-background); border: 1px solid var(--node-color); border-left-width: 4px; border-radius: 8px; box-shadow: 0 3px 12px rgba(0,0,0,.16); cursor: grab; touch-action: none; user-select: none; }
     .node.dragging { z-index: 3; cursor: grabbing; box-shadow: 0 8px 24px rgba(0,0,0,.28); }
-    .node:hover, .node:focus-visible, .node.active { outline: 2px solid var(--node-color); outline-offset: 2px; }
+    .node { transition: background-color .15s ease; }
+    .node:hover { background: color-mix(in srgb, var(--node-color) 10%, var(--vscode-editorWidget-background)); }
+    .node.active { background: color-mix(in srgb, var(--node-color) 17%, var(--vscode-editorWidget-background)); }
+    /* Keyboard focus keeps an outline so it stays visible; mouse clicks do not trigger :focus-visible. */
+    .node:focus { outline: none; }
+    .node:focus-visible { outline: 2px solid var(--node-color); outline-offset: 2px; }
     .node-kind { display: block; margin-bottom: 4px; color: var(--node-color); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
     .node-label { display: block; overflow: hidden; font-size: 12px; font-weight: 650; line-height: 1.3; text-overflow: ellipsis; }
     .node.unused { opacity: .72; border-style: dashed; }
