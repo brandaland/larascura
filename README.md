@@ -8,7 +8,7 @@ It is designed for developers who want to understand Laravel—not merely browse
 
 ## Why LaraScura exists
 
-LaraScura was created for people who understand systems better through flows and relationships than through punctuation and syntax. It is free because learning tools like this should be accessible to every young developer.
+LaraScura was created for people who understand systems better through flows and relationships than through punctuation and syntax. It is free because learning tools like this should be accessible to every learner, at any age.
 
 > **Free forever. No telemetry, no subscriptions, and no hidden costs. Just learn, build, and pass it on.**
 
