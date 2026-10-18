@@ -102,15 +102,32 @@ A missing connection means the syntax was not statically resolvable — not that
 
 ## Roadmap
 
-- ✅ Route-group prefix and inherited middleware resolution — completed in `0.2.2`
-- ✅ Controller resolution for `Route::controller(...)` groups, string resource controllers, and `Route::resources()` — completed in `0.5.1`
-- ✅ Event-to-listener registration mapping — completed in `0.3.0`
-- ✅ Laravel middleware alias resolution — completed in `0.3.0`
-- Method-level request journey view
-- ✅ Form Request nodes — completed in `0.3.0`
-- Policy, Resource, Notification, Mail, and Observer nodes
-- Laravel-version-aware learning cards
-- Multi-project workspace comparison
+LaraScura's goal is to make Laravel easier to learn by showing how a request really travels through an app, and why each piece is there.
+
+### Next: 1.0, *See a request travel*
+
+- **Request Journey.** Pick a route and step through it: middleware, validation, controller, services, events, the page or response. Each step explains in plain words what Laravel is doing.
+- **Learning mode.** Show only the flow you are studying, with explanations written for people new to Laravel.
+- **Explain Selection, rebuilt.** Fifty common Laravel patterns explained in context, each linked to the official documentation.
+- **Coverage.** Blade views and Livewire components; Policy, Observer, Notification, Mail, API Resource and scheduled-task nodes; dependencies resolved through `app()` and facades.
+
+### Doctor as a teacher
+
+- Every finding explains the Laravel rule behind it, not just what is wrong.
+- **Security radar:** routes that change data without authentication, mass-assignable models, login routes without throttling.
+- **Database view** from migrations, with checks such as a `hasMany` relation whose foreign key does not exist.
+
+### Later
+
+- **Change impact:** see which routes and pages a branch touches before you merge.
+- Export the map as Mermaid for documentation and pull requests.
+- Laravel-version-aware explanations.
+- Translations contributed by the community.
+- Incremental scanning for very large projects.
+
+### What will not change
+
+Local-first, no telemetry, no code execution, free forever, and uncertainty always shown instead of guessed.
 
 ## How LaraScura is built
 
