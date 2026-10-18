@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { closest, diagnose, editDistance, linkRouteFindings, type DoctorInput } from '../src/doctor.js';
+import type { PageProps } from '../src/inertia.js';
 import { parsePhpClass, parseRoutes } from '../src/phpParser.js';
 
 const php = (...lines: string[]): string => ['<?php', ...lines].join('\n');
@@ -298,7 +299,7 @@ describe('LaraScura Doctor', () => {
     });
 
     it('lists pages nothing renders, but not child components or when page names are dynamic', () => {
-      const pages = new Map([
+      const pages = new Map<string, { file: string; props?: PageProps }>([
         ['Orders/Index', page(['orders', true])],
         ['CartPage', { file: 'resources/js/Pages/CartPage.vue', props: undefined }],
         ['Checkout/components/Alerts', { file: 'resources/js/Pages/Checkout/components/Alerts.vue', props: undefined }],
