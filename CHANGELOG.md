@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.4
+
+- Fixed the map falling apart in narrow panels, for example after *Open source beside*. The toolbar no longer wraps or pushes the page wider than the panel, labels in the navigator fit, and the Inspector opens as a right-hand drawer instead of a bottom sheet that overflowed.
+- While the drawer is open, the map is laid out in the part of the panel it leaves visible, so no node hides behind it.
+
 ## 0.6.3
 
 - The pages layer is named after the framework it detects: *Vue Pages*, *React Pages* or *Svelte Pages*, and page nodes read `VUE PAGE`, so it is clear at a glance that this is what users see.

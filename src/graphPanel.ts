@@ -158,17 +158,17 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     * { box-sizing: border-box; }
     body { margin: 0; color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); overflow: hidden; }
     button, input, select { font: inherit; }
-    .app { height: 100vh; display: grid; grid-template-rows: auto 1fr; }
-    .toolbar { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 12px; border-bottom: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
+    .app { width: 100vw; height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; overflow: hidden; }
+    .toolbar { display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; min-width: 0; min-height: 52px; overflow: hidden; padding: 8px 12px; border-bottom: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
     .brand { display: flex; align-items: center; gap: 8px; margin-right: 4px; font-weight: 700; white-space: nowrap; }
     .brand-mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: white; background: #7c3aed; }
-    .search { width: min(340px, 32vw); height: 32px; padding: 0 10px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); border-radius: 6px; outline: none; }
+    .search { flex: 0 1 340px; width: auto; min-width: 110px; height: 32px; padding: 0 10px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); border-radius: 6px; outline: none; }
     .search:focus { border-color: var(--vscode-focusBorder); }
-    .tool-button { height: 32px; padding: 0 12px; color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: 0; border-radius: 6px; cursor: pointer; }
+    .tool-button { flex-shrink: 0; height: 32px; padding: 0 12px; white-space: nowrap; color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: 0; border-radius: 6px; cursor: pointer; }
     .tool-button:hover { background: var(--vscode-button-hoverBackground); }
     .tool-button.secondary { color: var(--vscode-foreground); background: var(--vscode-button-secondaryBackground); }
     .tool-button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
-    .zoom { width: 100px; accent-color: #7c3aed; }
+    .zoom { flex-shrink: 0; width: 100px; accent-color: #7c3aed; }
     .stats { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: 12px; white-space: nowrap; }
     .workspace { position: relative; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr) 340px; }
     .workspace.inspector-collapsed { grid-template-columns: 250px minmax(0, 1fr); }
@@ -306,15 +306,24 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .context-icon { width: 14px; opacity: .75; text-align: center; }
     .context-separator { height: 1px; margin: 4px 6px; background: var(--vscode-menu-separatorBackground, var(--vscode-panel-border)); }
     .hidden { display: none !important; }
+    /* Narrow panels (for example with source open beside): the Inspector becomes a right-hand drawer. */
     @media (max-width: 1050px) {
-      .workspace { grid-template-columns: 220px 1fr; }
-      .detail:not(.closed):not(.minimized) { position: absolute; z-index: 7; right: 0; bottom: 0; width: min(88vw, 340px); max-height: 55vh; border-top: 1px solid var(--vscode-panel-border); box-shadow: -8px -8px 24px rgba(0,0,0,.2); }
+      .workspace, .workspace.inspector-collapsed { grid-template-columns: 210px minmax(0, 1fr); }
+      .detail:not(.closed):not(.minimized) { position: absolute; z-index: 7; top: 0; right: 0; bottom: 0; width: min(340px, 48%); box-shadow: -12px 0 28px rgba(0,0,0,.22); }
       .stats { display: none; }
+      .layer-button { grid-template-columns: 20px minmax(0, 1fr) 30px 28px; gap: 5px; }
+      .specimen-stats { font-size: 9px; }
+    }
+    @media (max-width: 860px) {
+      .zoom, .brand span:last-child { display: none; }
+      .toolbar { gap: 8px; }
+      .tool-button { padding: 0 10px; }
     }
     @media (max-width: 650px) {
-      .workspace { grid-template-columns: 180px 1fr; }
-      .brand span:last-child, .zoom { display: none; }
-      .search { width: 100%; }
+      .workspace, .workspace.inspector-collapsed { grid-template-columns: 170px minmax(0, 1fr); }
+      .detail:not(.closed):not(.minimized) { width: min(320px, 70%); }
+      .layer-bar, .spectrum-caption { display: none; }
+      .layer-button { grid-template-columns: 20px minmax(0, 1fr) 28px; }
     }
   </style>
 </head>
@@ -441,6 +450,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     }
 
     function setInspectorState(nextState, persist = true) {
+      const covered = graph ? inspectorCoversMap() : false;
       inspectorState = nextState;
       detail.classList.toggle('closed', nextState === 'closed');
       detail.classList.toggle('minimized', nextState === 'minimized');
@@ -452,6 +462,8 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       minimizeButton.title = restoring ? 'Restore Inspector' : 'Minimize Inspector';
       minimizeButton.setAttribute('aria-label', minimizeButton.title);
       if (persist) persistUiState();
+      // Opening or closing the drawer changes the visible map width without resizing the panel.
+      if (graph && covered !== inspectorCoversMap()) setTimeout(render, 0);
     }
 
     function openInspector(title) {
@@ -948,6 +960,14 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       return { placements, labels };
     }
 
+    // In narrow panels the Inspector floats over the map as a drawer; lay nodes out in the part left visible.
+    function inspectorCoversMap() {
+      return inspectorState === 'open' && getComputedStyle(detail).position === 'absolute';
+    }
+    function visibleMapWidth() {
+      return Math.max(0, viewport.clientWidth - (inspectorCoversMap() ? detail.offsetWidth : 0));
+    }
+
     function render() {
       if (!graph) return;
       nodesRoot.replaceChildren();
@@ -960,7 +980,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       const groups = layers
         .map(kinds => ({ kinds, nodes: visible.filter(node => kinds.includes(node.kind)) }))
         .filter(group => group.nodes.length);
-      const layout = arrangeLayers(groups, viewport.clientWidth / zoomLevel, (viewport.clientHeight - scopeBar.offsetHeight) / zoomLevel);
+      const layout = arrangeLayers(groups, visibleMapWidth() / zoomLevel, (viewport.clientHeight - scopeBar.offsetHeight) / zoomLevel);
 
       for (const column of layout.labels) {
         const label = text('div', column.text, 'column-label');
