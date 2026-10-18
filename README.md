@@ -112,6 +112,10 @@ A missing connection means the syntax was not statically resolvable — not that
 - Laravel-version-aware learning cards
 - Multi-project workspace comparison
 
+## How LaraScura is built
+
+LaraScura started from a designer's wish to see how Laravel fits together. It is built with AI coding assistants (OpenAI Codex and Anthropic Claude), guided and tested on real Laravel projects by its author.
+
 ## License
 
 LaraScura is free and open-source software released under the MIT License. See the included `LICENSE` file. You may use, copy, modify, merge, publish, distribute, sublicense, and sell copies of the software, provided that the copyright and license notice remain included.
