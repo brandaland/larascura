@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.5
+
+- Open the map without the Command Palette: a LaraScura button in the editor title bar of PHP files, and **Open Architecture Map** and **Doctor** rows at the top of the LaraScura sidebar. The Doctor row shows the latest count and opens the Problems panel. Sidebar layers now follow the request lifecycle, like the map.
+- Class names written with a namespace prefix (`Models\User`, an aliased `Books\Ledger`) now resolve the way PHP does: through an imported first segment, otherwise the current namespace.
+- When a project exceeds the 10,000-file scan limit, the map shows a *Partial scan* notice and the status bar says *(partial)*, so an incomplete map is never mistaken for a complete one.
+- README: how LaraScura is built, and a note that it is for every learner, at any age.
+
 ## 0.6.4
 
 - Fixed the map falling apart in narrow panels, for example after *Open source beside*. The toolbar no longer wraps or pushes the page wider than the panel, labels in the navigator fit, and the Inspector opens as a right-hand drawer instead of a bottom sheet that overflowed.
