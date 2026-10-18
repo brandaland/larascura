@@ -84,6 +84,8 @@ export interface ArchitectureGraph {
   projectName: string;
   root: string;
   sourceDirectories: string[];
+  /** True when the file limit was reached, so the map and Doctor may be incomplete. */
+  partial?: boolean;
   /** Framework of the Inertia pages (Vue, React, Svelte), used to name the pages layer. */
   pageFramework?: string;
   generatedAt: string;

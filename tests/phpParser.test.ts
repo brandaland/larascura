@@ -437,6 +437,33 @@ describe('Laravel PHP syntax parser', () => {
     expect(routes.map((route) => route.name)).toEqual(['admin.shipping.method.index', 'admin.users.index']);
   });
 
+  it('resolves qualified names through an imported first segment or the current namespace, like PHP', () => {
+    const parsed = parsePhpClass('app/Models/Post.php', [
+      '<?php',
+      'namespace App\\Models;',
+      'use App\\Domain;',
+      'use App\\Accounting\\Ledgers as Books;',
+      'use App\\Support\\Tags\\Tag as Label;',
+      'class Post extends Model {',
+      '    public function comments() { return $this->hasMany(Domain\\Blog\\Comment::class); }',
+      '    public function invoice() { return $this->hasOne(Billing\\Invoice::class); }',
+      '    public function author() { return $this->belongsTo(\\App\\Models\\User::class); }',
+      '    public function ledger() { return $this->belongsTo(Books\\Ledger::class); }',
+      '    public function labels() { return $this->hasMany(Label::class); }',
+      '    public function category() { return $this->belongsTo(Category::class); }',
+      '}',
+    ].join('\n'));
+
+    expect(parsed?.relations.map((relation) => relation.target)).toEqual([
+      'App\\Domain\\Blog\\Comment', // imported first segment
+      'App\\Models\\Billing\\Invoice', // qualified, relative to the current namespace
+      'App\\Models\\User', // leading backslash: already fully qualified
+      'App\\Accounting\\Ledgers\\Ledger', // aliased first segment
+      'App\\Support\\Tags\\Tag', // aliased class
+      'App\\Models\\Category', // unqualified, current namespace
+    ]);
+  });
+
   it('explains common Laravel syntax without a network service', () => {
     expect(explainSyntax("Route::post('/orders', [OrderController::class, 'store']);", 'tr')).toContain(
       'HTTP adresini',

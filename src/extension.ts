@@ -196,7 +196,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       codeLenses.refresh();
       void publishFindings(graph.findings);
       const issues = graph.findings.filter((finding) => finding.severity === 'warning').length;
-      status.text = `$(type-hierarchy) LaraScura ${graph.nodes.length}${issues ? ` $(warning) ${issues}` : ''}`;
+      status.text = `$(type-hierarchy) LaraScura ${graph.nodes.length}${graph.partial ? ' (partial)' : ''}${issues ? ` $(warning) ${issues}` : ''}`;
       status.tooltip = `${graph.projectName}: ${graph.nodes.length} nodes, ${graph.edges.length} connections`
         + (graph.findings.length ? `, ${graph.findings.length} LaraScura Doctor finding(s) in the Problems panel` : '');
       return graph;

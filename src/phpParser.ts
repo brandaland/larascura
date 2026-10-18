@@ -76,9 +76,14 @@ const resolveName = (name: string, imports: Map<string, string>, namespace: stri
   const trimmed = name.trim();
   const cleaned = trimmed.replace(/^\\/, '');
   if (!cleaned || ['self', 'static', 'parent'].includes(cleaned)) return cleaned;
-  // A leading backslash (\Closure) or any namespace separator means the name is already fully qualified.
-  if (trimmed.startsWith('\\') || cleaned.includes('\\')) return cleaned;
-  return imports.get(cleaned) ?? (namespace ? `${namespace}\\${cleaned}` : cleaned);
+  // A leading backslash (\Closure) means the name is already fully qualified.
+  if (trimmed.startsWith('\\')) return cleaned;
+  // Like PHP: a qualified name (Models\User) resolves through an import of its first segment, else the
+  // current namespace; an unqualified name through its own import, else the current namespace.
+  const [first, ...rest] = cleaned.split('\\');
+  const imported = first ? imports.get(first) : undefined;
+  if (imported) return [imported, ...rest].join('\\');
+  return namespace ? `${namespace}\\${cleaned}` : cleaned;
 };
 
 const classify = (file: string, name: string, extendsName = ''): ParsedClass['kind'] => {

@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import type { ArchitectureGraph, ArchitectureNode, NodeKind } from './types.js';
 
 type TreeEntry =
+  | { type: 'action'; action: 'openMap' | 'doctor' }
   | { type: 'group'; kind: NodeKind; count: number }
   | { type: 'node'; node: ArchitectureNode }
   | { type: 'empty' };
@@ -23,6 +24,9 @@ const labels: Partial<Record<NodeKind, string>> = {
   command: 'Commands',
   class: 'Other Classes',
 };
+
+// Same order as the map: the way a request travels through the app.
+const lifecycleOrder: NodeKind[] = ['route', 'middleware', 'request', 'controller', 'page', 'service', 'repository', 'provider', 'model', 'event', 'listener', 'job', 'command', 'class'];
 
 const icons: Record<NodeKind, string> = {
   route: 'git-merge',
@@ -52,10 +56,20 @@ export class ArchitectureTreeProvider implements vscode.TreeDataProvider<TreeEnt
   }
 
   public getTreeItem(element: TreeEntry): vscode.TreeItem {
-    if (element.type === 'empty') {
-      const item = new vscode.TreeItem('Open a Laravel project, then build its map');
-      item.iconPath = new vscode.ThemeIcon('info');
+    if (element.type === 'empty' || (element.type === 'action' && element.action === 'openMap')) {
+      const item = new vscode.TreeItem('Open Architecture Map');
+      item.iconPath = new vscode.ThemeIcon('type-hierarchy');
+      item.tooltip = 'Open the LaraScura map of this Laravel project';
       item.command = { command: 'larascura.openMap', title: 'Open Architecture Map' };
+      return item;
+    }
+    if (element.type === 'action') {
+      const findings = this.graph?.findings ?? [];
+      const mistakes = findings.filter((finding) => finding.severity === 'warning').length;
+      const item = new vscode.TreeItem(`Doctor · ${mistakes ? `${mistakes} possible mistake${mistakes === 1 ? '' : 's'}` : `${findings.length} tip${findings.length === 1 ? '' : 's'}`}`);
+      item.iconPath = new vscode.ThemeIcon(mistakes ? 'warning' : 'info');
+      item.tooltip = 'Show LaraScura Doctor findings in the Problems panel';
+      item.command = { command: 'workbench.actions.view.problems', title: 'Show Problems' };
       return item;
     }
     if (element.type === 'group') {
@@ -86,9 +100,14 @@ export class ArchitectureTreeProvider implements vscode.TreeDataProvider<TreeEnt
     if (!element) {
       const counts = new Map<NodeKind, number>();
       for (const node of this.graph.nodes) counts.set(node.kind, (counts.get(node.kind) ?? 0) + 1);
-      return [...counts.entries()]
-        .sort(([left], [right]) => (labels[left] ?? left).localeCompare(labels[right] ?? right))
-        .map(([kind, count]) => ({ type: 'group', kind, count }));
+      const actions: TreeEntry[] = [{ type: 'action', action: 'openMap' }];
+      if (this.graph.findings.length) actions.push({ type: 'action', action: 'doctor' });
+      return [
+        ...actions,
+        ...[...counts.entries()]
+          .sort(([left], [right]) => lifecycleOrder.indexOf(left) - lifecycleOrder.indexOf(right))
+          .map(([kind, count]): TreeEntry => ({ type: 'group', kind, count })),
+      ];
     }
     if (element.type !== 'group') return [];
     return this.graph.nodes

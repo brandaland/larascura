@@ -386,6 +386,10 @@ describe('LaraScura architecture webview', () => {
     ]);
     expect(document.querySelectorAll('.spectrum-segment')).toHaveLength(7);
     expect(document.querySelector('.specimen-stats')?.textContent).toBe('9 nodes9 links2 routes');
+    expect(document.querySelector('.specimen-partial')).toBeNull();
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph: { ...graph, partial: true } } }));
+    expect(document.querySelector('.specimen-partial')?.textContent).toContain('Partial scan');
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph } }));
     expect([...document.querySelectorAll('.route-item .method')].map((badge) => badge.textContent).sort()).toEqual(['GET', 'POST']);
 
     dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'focus', nodeId: 'ctrl' } }));

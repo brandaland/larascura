@@ -229,10 +229,11 @@ export class LaravelScanner {
       .getConfiguration('larascura')
       .get<boolean>('includeRepositories', true);
     const directories = await scanDirectories(root);
+    const fileLimit = 10000;
     const files = await vscode.workspace.findFiles(
       new vscode.RelativePattern(root, phpGlob(directories)),
       new vscode.RelativePattern(root, '{vendor,storage,bootstrap/cache,node_modules}/**'),
-      10000,
+      fileLimit,
       token,
     );
     const nodes = new Map<string, ArchitectureNode>();
@@ -599,6 +600,11 @@ export class LaravelScanner {
       warnings.push('composer.json could not be parsed; the folder name is used as the project name.');
     }
 
+    if (files.length >= fileLimit) {
+      warnings.unshift(
+        `Only the first ${fileLimit.toLocaleString('en')} PHP files were scanned, so parts of this project may be missing from the map and from Doctor.`,
+      );
+    }
     if (ambiguousReferences.size) {
       const names = [...ambiguousReferences].sort();
       warnings.unshift(
@@ -645,6 +651,7 @@ export class LaravelScanner {
       projectName,
       root: root.fsPath,
       sourceDirectories: directories,
+      partial: files.length >= fileLimit,
       pageFramework: pageFrameworkOf([...inertia.pages.values()].map((page) => page.file)),
       generatedAt: new Date().toISOString(),
       nodes: [...nodes.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label)),

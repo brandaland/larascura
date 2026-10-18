@@ -263,6 +263,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .spectrum-segment { min-width: 3px; padding: 0; background: var(--segment-color); border: 0; opacity: .82; cursor: pointer; transition: opacity .15s ease; }
     .spectrum-segment:hover, .spectrum-segment:focus-visible { opacity: 1; outline: none; }
     .spectrum-caption { display: flex; justify-content: space-between; margin-top: 5px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 9px; letter-spacing: .04em; }
+    .specimen-partial { margin-top: 9px; padding: 5px 8px; border-radius: 6px; color: var(--vscode-editorWarning-foreground, #b45309); background: color-mix(in srgb, #f59e0b 14%, transparent); font-size: 10px; font-weight: 600; }
     .nav-caption { margin: -2px 8px 6px 24px; color: var(--vscode-descriptionForeground); font-size: 10px; }
     .lifecycle { position: relative; margin: 2px 0 4px; }
     .lifecycle::before { content: ''; position: absolute; top: 15px; bottom: 15px; left: 19px; width: 2px; border-radius: 1px; background: linear-gradient(#22c55e, #3b82f6 30%, #ef4444 60%, #94a3b8); opacity: .35; }
@@ -740,6 +741,12 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       caption.className = 'spectrum-caption';
       caption.append(text('span', 'entry'), text('span', 'composition'), text('span', 'async'));
       card.append(text('div', 'LaraScura · specimen', 'specimen-eyebrow'), name, stats, spectrum, caption);
+      if (graph.partial) {
+        // A map that looks complete but is not would mislead more than no map at all.
+        const partial = text('div', '⚠ Partial scan: only the first 10,000 PHP files were read', 'specimen-partial');
+        partial.title = 'Some classes and routes may be missing from the map and from Doctor.';
+        card.append(partial);
+      }
       return card;
     }
 

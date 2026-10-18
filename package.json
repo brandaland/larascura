@@ -157,6 +157,13 @@
           "command": "larascura.openFile",
           "when": "false"
         }
+      ],
+      "editor/title": [
+        {
+          "command": "larascura.openMap",
+          "when": "resourceLangId == php && isWorkspaceTrusted",
+          "group": "navigation"
+        }
       ]
     },
     "configuration": {
