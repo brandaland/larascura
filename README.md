@@ -57,7 +57,7 @@ See the bundled SECURITY.md file for the threat model.
 
 Requirements:
 
-- Node.js 20+
+- Node.js 22.22+
 - npm
 - VS Code 1.95+
 
