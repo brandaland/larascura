@@ -193,6 +193,17 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .scope-bar { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; min-height: 38px; gap: 8px; padding: 6px 12px; color: var(--vscode-descriptionForeground); background: color-mix(in srgb, var(--vscode-editor-background) 92%, transparent); border-bottom: 1px solid var(--vscode-panel-border); backdrop-filter: blur(8px); font-size: 11px; }
     .scope-name { color: var(--vscode-foreground); font-weight: 650; }
     .scope-note { margin-left: auto; }
+    .crumbs { display: contents; }
+    .crumb { padding: 2px 4px; color: var(--vscode-textLink-foreground); background: none; border: 0; border-radius: 4px; font-size: 11px; cursor: pointer; }
+    .crumb:hover { background: var(--vscode-list-hoverBackground); }
+    .crumb-home { font-weight: 600; }
+    .crumb-sep { opacity: .6; }
+    .group-item { display: grid; width: calc(100% - 30px); min-height: 24px; margin-left: 30px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 2px 8px; color: var(--vscode-foreground); background: transparent; border: 0; border-left: 2px solid color-mix(in srgb, var(--layer-color) 40%, transparent); border-radius: 0 6px 6px 0; font-family: var(--vscode-editor-font-family); font-size: 11px; text-align: left; cursor: pointer; }
+    .group-item:hover { background: var(--vscode-list-hoverBackground); }
+    .group-item.active { color: var(--vscode-list-activeSelectionForeground); background: var(--vscode-list-activeSelectionBackground); border-left-color: var(--layer-color); }
+    .group-label { position: absolute; display: flex; align-items: baseline; gap: 8px; padding: 0 0 4px; color: var(--vscode-foreground); background: none; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--group-color) 35%, transparent); font-family: var(--vscode-editor-font-family); font-size: 12px; font-weight: 650; text-align: left; cursor: pointer; }
+    .group-label:hover { color: var(--vscode-textLink-foreground); }
+    .group-label .nav-count { font-weight: 400; }
     .viewport { position: relative; overflow: auto; background-image: radial-gradient(var(--vscode-panel-border) 0.7px, transparent 0.7px); background-size: 18px 18px; }
     .stage { position: relative; transform-origin: top left; }
     .edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
@@ -379,7 +390,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     <div id="workspace" class="workspace">
       <nav id="tree" class="navigator" aria-label="Laravel architecture categories"></nav>
       <main id="viewport" class="viewport" aria-label="Laravel architecture graph">
-        <div id="scopeBar" class="scope-bar"><span>Scope</span><span id="scopeName" class="scope-name">Overview</span><button id="journeyStart" class="journey-start" type="button" title="Step through how Laravel handles this request" hidden>▶ Request journey</button><span id="journeyControls" class="journey-controls" role="group" aria-label="Request journey controls" hidden></span><span id="scopeNote" class="scope-note"></span></div>
+        <div id="scopeBar" class="scope-bar"><span id="crumbs" class="crumbs"></span><span id="scopeName" class="scope-name">Overview</span><button id="journeyStart" class="journey-start" type="button" title="Step through how Laravel handles this request" hidden>▶ Request journey</button><span id="journeyControls" class="journey-controls" role="group" aria-label="Request journey controls" hidden></span><span id="scopeNote" class="scope-note"></span></div>
         <div id="stage" class="stage"><svg id="edges" class="edges" aria-hidden="true"></svg><div id="nodes"></div><div id="journeyPacket" class="journey-packet" hidden></div></div>
       </main>
       <aside id="detail" class="detail" aria-live="polite">
@@ -450,6 +461,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     const scopeNote = document.getElementById('scopeNote');
     const viewport = document.getElementById('viewport');
     const scopeBar = document.getElementById('scopeBar');
+    const crumbs = document.getElementById('crumbs');
     const svgNs = 'http://www.w3.org/2000/svg';
 
     function text(tag, value, className) {
@@ -464,8 +476,44 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       return uri.split('/').filter(Boolean)[0] || 'root';
     }
 
+    // Each layer's conventional folder; a class's group is the subfolder below it (Controllers/Admin → Admin).
+    const baseFolders = {
+      controller: 'Controllers', middleware: 'Middleware', request: 'Requests', model: 'Models', service: 'Services',
+      repository: 'Repositories', job: 'Jobs', event: 'Events', listener: 'Listeners', provider: 'Providers', command: 'Commands'
+    };
+    const backslash = String.fromCharCode(92);
+
+    function nodeGroup(node) {
+      if (node.kind === 'route') return routeModule(node);
+      if (node.kind === 'page') return node.label.includes('/') ? node.label.split('/')[0] : '';
+      const parts = (node.qualifiedName || '').split(backslash).slice(0, -1);
+      const base = parts.lastIndexOf(baseFolders[node.kind]);
+      if (base >= 0) return parts[base + 1] || '';
+      // Outside the usual folder (support classes, copied libraries): the namespace says where it lives.
+      return (parts[0] === 'App' ? parts.slice(1) : parts).slice(0, 2).join('/');
+    }
+
+    function groupLabel(kind, group) {
+      if (kind === 'route') return '/' + (group === 'root' ? '' : group);
+      if (group) return group + '/';
+      return (kind === 'page' ? 'Pages' : baseFolders[kind] || 'App') + '/';
+    }
+
+    // Groups of one layer, top-level folder first and the rest alphabetically.
+    function layerGroups(kind) {
+      const groups = new Map();
+      for (const node of graph.nodes) {
+        if (node.kind !== kind) continue;
+        const group = nodeGroup(node);
+        groups.set(group, (groups.get(group) || []).concat(node));
+      }
+      return [...groups.entries()]
+        .sort(([left], [right]) => (left === '' || left === 'root' ? -1 : right === '' || right === 'root' ? 1 : left.localeCompare(right)))
+        .map(([group, nodes]) => ({ group, nodes }));
+    }
+
     function scopeKey(value) {
-      return value.type + ':' + (value.value || '');
+      return value.type + ':' + (value.value || '') + (value.type === 'group' ? '/' + value.group : '');
     }
 
     function layoutKey(nodeId) {
@@ -634,9 +682,9 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       let seeds = [];
       let depth = 1;
       let limit = 220;
-      if (scope.type === 'kind') {
-        const layerNodes = graph.nodes.filter(node => node.kind === scope.value);
-        const visibleNodes = layerNodes.slice(0, 120);
+      if (scope.type === 'kind' || scope.type === 'group') {
+        const layerNodes = graph.nodes.filter(node => node.kind === scope.value && (scope.type === 'kind' || nodeGroup(node) === scope.group));
+        const visibleNodes = layerNodes.slice(0, 400);
         return {
           nodes: visibleNodes,
           edges: [],
@@ -714,7 +762,9 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
 
     function isActiveScope(nextScope) {
       const focusedNode = scope.type === 'node' ? graph.nodes.find(node => node.id === scope.value) : null;
-      return scopeKey(scope) === scopeKey(nextScope) || (nextScope.type === 'kind' && focusedNode?.kind === nextScope.value);
+      if (scopeKey(scope) === scopeKey(nextScope)) return true;
+      if (nextScope.type === 'kind') return focusedNode?.kind === nextScope.value || (scope.type === 'group' && scope.value === nextScope.value);
+      return nextScope.type === 'group' && focusedNode?.kind === nextScope.value && nodeGroup(focusedNode) === nextScope.group;
     }
 
     function navButton(label, count, nextScope, className) {
@@ -816,6 +866,22 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         button.append(text('span', '', 'layer-dot'), text('span', kindLabels[kind] || kind, 'nav-label'), bar, text('span', String(count), 'layer-count'));
         button.addEventListener('click', () => activateScope(nextScope));
         axis.append(button);
+        // The open layer lists its folders, so a large layer can be narrowed to one of them.
+        const open = isActiveScope(nextScope);
+        const groups = open ? layerGroups(kind) : [];
+        if (groups.length > 1) {
+          groups.forEach(({ group, nodes }) => {
+            const groupScope = { type: 'group', value: kind, group };
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'group-item' + (isActiveScope(groupScope) ? ' active' : '');
+            item.style.setProperty('--layer-color', colors[kind] || colors.class);
+            item.title = groupLabel(kind, group) + ' · ' + nodes.length;
+            item.append(text('span', groupLabel(kind, group), 'nav-label'), text('span', String(nodes.length), 'nav-count'));
+            item.addEventListener('click', () => activateScope(groupScope));
+            axis.append(item);
+          });
+        }
       });
       architecture.append(axis);
       treeRoot.append(architecture);
@@ -957,6 +1023,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     const maxColumnStep = 230;
     const rowStep = 86;
     const bandGap = 88;
+    const groupGap = 70;
     let lastRendered = null;
 
     // Lays layer groups out to fit the visible width without shrinking nodes: layers that do not
@@ -1005,6 +1072,36 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       return { placements, labels };
     }
 
+    // Lays one layer's folders out as sections: each takes as many columns as it needs, and small
+    // folders share a shelf side by side so a layer of many small folders stays compact.
+    function arrangeGroups(sections, availableWidth) {
+      const usable = availableWidth > 0 ? availableWidth : 1100;
+      const columnsFit = Math.max(1, Math.floor((usable - padX * 2 - nodeWidth) / minColumnStep) + 1);
+      const step = columnsFit > 1 ? Math.min(maxColumnStep, (usable - padX * 2 - nodeWidth) / (columnsFit - 1)) : maxColumnStep;
+      const placements = [];
+      const headings = [];
+      let column = 0;
+      let shelfTop = firstRowY;
+      let shelfRows = 0;
+      for (const section of sections) {
+        const columns = Math.min(section.nodes.length, columnsFit);
+        if (column + columns > columnsFit) {
+          shelfTop += shelfRows * rowStep + groupGap;
+          column = 0;
+          shelfRows = 0;
+        }
+        headings.push({ section, x: padX + column * step, y: shelfTop - 32, width: (columns - 1) * step + nodeWidth });
+        section.nodes.forEach((node, index) => placements.push({
+          node,
+          x: Math.round(padX + (column + index % columns) * step),
+          y: shelfTop + Math.floor(index / columns) * rowStep
+        }));
+        column += columns;
+        shelfRows = Math.max(shelfRows, Math.ceil(section.nodes.length / columns));
+      }
+      return { placements, labels: [], headings };
+    }
+
     // In narrow panels the Inspector floats over the map as a drawer; lay nodes out in the part left visible.
     function inspectorCoversMap() {
       return inspectorState === 'open' && getComputedStyle(detail).position === 'absolute';
@@ -1026,16 +1123,44 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       lastRendered = current;
       const visible = current.nodes;
       const visibleIds = new Set(visible.map(node => node.id));
-      const groups = layers
-        .map(kinds => ({ kinds, nodes: visible.filter(node => kinds.includes(node.kind)) }))
-        .filter(group => group.nodes.length);
-      const layout = arrangeLayers(groups, visibleMapWidth() / zoomLevel, (viewport.clientHeight - scopeBar.offsetHeight) / zoomLevel);
+      const groupedScope = !search.value.trim() && (scope.type === 'kind' || scope.type === 'group');
+      let layout;
+      if (groupedScope) {
+        const visibleSet = new Set(visibleIds);
+        const sections = layerGroups(scope.value)
+          .filter(({ group }) => scope.type === 'kind' || group === scope.group)
+          .map(({ group, nodes }) => ({ kind: scope.value, group, total: nodes.length, nodes: nodes.filter(node => visibleSet.has(node.id)) }))
+          .filter(section => section.nodes.length);
+        layout = arrangeGroups(sections, visibleMapWidth() / zoomLevel);
+      } else {
+        const groups = layers
+          .map(kinds => ({ kinds, nodes: visible.filter(node => kinds.includes(node.kind)) }))
+          .filter(group => group.nodes.length);
+        layout = arrangeLayers(groups, visibleMapWidth() / zoomLevel, (viewport.clientHeight - scopeBar.offsetHeight) / zoomLevel);
+      }
 
       for (const column of layout.labels) {
         const label = text('div', column.text, 'column-label');
         label.style.left = column.x + 'px';
         label.style.top = column.y + 'px';
         label.style.width = column.width + 'px';
+        nodesRoot.appendChild(label);
+      }
+      for (const heading of layout.headings || []) {
+        const { kind, group, total } = heading.section;
+        const opensGroup = scope.type === 'kind';
+        const label = document.createElement(opensGroup ? 'button' : 'div');
+        if (opensGroup) {
+          label.type = 'button';
+          label.title = 'Show only ' + groupLabel(kind, group);
+          label.addEventListener('click', () => activateScope({ type: 'group', value: kind, group }));
+        }
+        label.className = 'group-label';
+        label.style.left = heading.x + 'px';
+        label.style.top = heading.y + 'px';
+        label.style.width = heading.width + 'px';
+        label.style.setProperty('--group-color', colors[kind] || colors.class);
+        label.append(text('span', groupLabel(kind, group), 'nav-label'), text('span', String(total), 'nav-count'));
         nodesRoot.appendChild(label);
       }
       for (const { node, x: autoX, y: autoY } of layout.placements) {
@@ -1074,17 +1199,43 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         module: 'Module · ' + (scope.value || ''),
         route: graph.nodes.find(node => node.id === scope.value)?.label || 'Request flow',
         kind: kindLabels[scope.value] || scope.value,
+        group: groupLabel(scope.value, scope.group),
         node: 'Connections · ' + (graph.nodes.find(node => node.id === scope.value)?.label || 'Selected node'),
         all: 'All nodes'
       };
       scopeName.textContent = search.value.trim() ? 'Search results' : labels[scope.type];
+      renderCrumbs();
       scopeNote.textContent = current.truncated
         ? 'Result limited for readability'
-        : scope.type === 'kind' && !search.value.trim()
-          ? visible.length + ' nodes · select one to show direct connections'
+        : groupedScope
+          ? visible.length + ' nodes' + (layout.headings.length > 1 ? ' in ' + layout.headings.length + ' folders' : '') + ' · select one to show direct connections'
           : visible.length + ' nodes · ' + current.edges.length + ' connections';
       stats.textContent = visible.length + '/' + graph.nodes.length + ' nodes';
       journeyStart.hidden = scope.type !== 'route' || Boolean(search.value.trim());
+    }
+
+    // The way back: Overview, then the layer and folder the current view came from.
+    function renderCrumbs() {
+      const trail = [];
+      const searching = Boolean(search.value.trim());
+      if (scope.type !== 'overview' || searching) trail.push(['Overview', { type: 'overview' }]);
+      const focused = !searching && (scope.type === 'node' || scope.type === 'route') ? graph.nodes.find(node => node.id === scope.value) : null;
+      if (!searching && scope.type === 'group') trail.push([kindLabels[scope.value] || scope.value, { type: 'kind', value: scope.value }]);
+      if (focused && scope.type === 'node') {
+        trail.push([kindLabels[focused.kind] || focused.kind, { type: 'kind', value: focused.kind }]);
+        if (layerGroups(focused.kind).length > 1) {
+          const group = nodeGroup(focused);
+          trail.push([groupLabel(focused.kind, group), { type: 'group', value: focused.kind, group }]);
+        }
+      }
+      if (focused && scope.type === 'route') trail.push([routeModule(focused), { type: 'module', value: routeModule(focused) }]);
+      crumbs.replaceChildren();
+      trail.forEach(([label, nextScope], index) => {
+        const button = text('button', index === 0 ? '← ' + label : label, 'crumb' + (index === 0 ? ' crumb-home' : ''));
+        button.type = 'button';
+        button.addEventListener('click', () => activateScope(nextScope));
+        crumbs.append(button, text('span', '›', 'crumb-sep'));
+      });
     }
 
     function section(title, body, code) {
@@ -1113,7 +1264,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         render();
         return;
       }
-      if (scope.type === 'kind' || scope.type === 'node') {
+      if (scope.type === 'kind' || scope.type === 'group' || scope.type === 'node') {
         scope = { type: 'node', value: node.id };
         renderTree();
       }

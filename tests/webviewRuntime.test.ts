@@ -132,6 +132,66 @@ describe('LaraScura architecture webview', () => {
     dom.window.close();
   });
 
+  it('groups a layer by folder and leads back to the overview', async () => {
+    const errors: string[] = [];
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on('jsdomError', (error) => errors.push(error.message));
+    const dom = new JSDOM(createGraphHtml('test-nonce'), {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      virtualConsole,
+      beforeParse(window) {
+        Object.assign(window, {
+          acquireVsCodeApi: () => ({ postMessage: () => undefined, getState: () => undefined, setState: () => undefined }),
+        });
+      },
+    });
+    const controller = (name: string, namespace: string) => ({
+      id: 'controller:' + name,
+      label: name,
+      qualifiedName: namespace + '\\' + name,
+      kind: 'controller' as const,
+      location: { file: '/workspace/example/app/Http/Controllers/' + name + '.php', line: 5 },
+      summary: 'Controller',
+      syntax: 'Controller syntax',
+    });
+    const graph: ArchitectureGraph = {
+      projectName: 'example/app',
+      root: '/workspace/example',
+      sourceDirectories: ['app'],
+      generatedAt: new Date(0).toISOString(),
+      warnings: [], findings: [], edges: [],
+      nodes: [
+        controller('HomeController', 'App\\Http\\Controllers'),
+        controller('UserController', 'App\\Http\\Controllers\\Admin'),
+        controller('ReportController', 'App\\Http\\Controllers\\Admin\\Reports'),
+        controller('ErrorCode', 'Razorpay\\Api\\Errors'),
+      ],
+    };
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'graph', graph } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const document = dom.window.document;
+    const click = (selector: string, text: string) =>
+      ([...document.querySelectorAll(selector)].find((element) => element.textContent?.includes(text)) as { click(): void } | undefined)?.click();
+
+    expect(document.querySelector('#crumbs')?.textContent).toBe('');
+    click('.layer-button', 'Controllers');
+    const folders = [...document.querySelectorAll('.group-item .nav-label')].map((element) => element.textContent);
+    expect(folders).toEqual(['Controllers/', 'Admin/', 'Razorpay/Api/']);
+    expect([...document.querySelectorAll('.group-label')].map((element) => element.textContent)).toEqual(['Controllers/1', 'Admin/2', 'Razorpay/Api/1']);
+
+    click('.group-label', 'Admin/');
+    expect(document.querySelector('#scopeName')?.textContent).toBe('Admin/');
+    expect(document.querySelectorAll('.node')).toHaveLength(2);
+    expect(document.querySelector('.group-item.active')?.textContent).toContain('Admin/');
+    expect(document.querySelector('#crumbs')?.textContent).toBe('← Overview›Controllers›');
+
+    click('.crumb', 'Overview');
+    expect(document.querySelector('#scopeName')?.textContent).toBe('Architecture overview');
+    expect(errors).toEqual([]);
+    dom.window.close();
+  });
+
   it('groups multi-method route labels under their real module', async () => {
     const dom = new JSDOM(createGraphHtml('test-nonce'), {
       runScripts: 'dangerously',
