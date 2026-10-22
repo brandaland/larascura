@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0
+
+- **Folders.** Every layer is grouped by the folder its classes live in: `Controllers/Admin`, `Api/`, `Auth/`, route modules such as `/admin`, and page folders. Open a layer and its folders appear in the navigator with their counts; on the canvas each folder gets its own heading, and small folders sit side by side. Click a folder or a heading to show only that folder. Classes outside the usual folder, for example a library copied into `app/`, are grouped by namespace, so they stand out.
+- **Folder colors.** Mark folders the way you mark them in Finder: click the dot next to a heading, or right-click a heading or a folder in the navigator, and pick one of seven colors or a custom one. Colored folders tint their nodes everywhere in the map, and the colors are saved with the project.
+- **A way back.** The scope bar is now a breadcrumb, `← Overview › Controllers › Admin/`, so you can always step back to the folder, the layer or the overview.
+- **A more helpful Inspector.** Each node starts with a few sentences about its role in *your* project: which table a model uses and what it belongs to, how many routes a controller handles and which pages it renders, which middleware a route passes through, and which classes use it. Models show their table, mass-assignable fields, casts, hidden fields, query scopes and relationships in plain words. *Used by* and *Uses* list each class once with the methods involved, and *Inside the class* lists the parent, traits and public methods, each opening the file at that line.
+- Static calls and instantiations such as `Banner::where()` and `new Parser` now count as connections to your own classes, so a model used only through queries no longer shows *in 0*. Facades and framework classes are left out.
+- The LaraScura sidebar uses the map's layer colors for its icons, and layers open into the same folders as the map. The colors are theme colors (`larascura.layer.*`), so themes can change them.
+
 ## 0.7.1
 
 - During a Request Journey the Inspector now follows the current step, so it always describes what the caption narrates — the page, the middleware, or the way back to the browser — instead of the route the journey started from.
