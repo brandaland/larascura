@@ -83,7 +83,9 @@ const edgeExplanation = (
     renders: tr
       ? `${source}, ${target} Inertia sayfasını döndürür. Inertia ${detail} verisini JSON olarak gönderir ve sayfa tarayıcıda Vue/React ile çizilir.`
       : `${source} returns the ${target} Inertia page. Inertia sends ${detail} as JSON props and the page is rendered in the browser.`,
-    calls: tr ? `${source}, ${target} sınıfını kullanır.` : `${source} uses ${target}.`,
+    calls: tr
+      ? `${source}, ${target} sınıfını doğrudan kullanır (${detail}).`
+      : `${source} uses ${target} directly (${detail}).`,
     dispatches: tr
       ? `${source}, ${target} job’ını dispatch eder; iş queue yapılandırmasına göre yürütülür.`
       : `${source} dispatches the ${target} job; queue configuration controls its execution.`,
@@ -282,6 +284,7 @@ export class LaravelScanner {
           preview: linePreview(source, parsed.line),
         },
         summary: kindSummary(parsed.kind, lang),
+        details: { parent: parsed.parent, traits: parsed.traits, methods: parsed.methods, model: parsed.model },
         syntax: parsed.kind === 'model'
           ? lang === 'tr'
             ? 'Eloquent model sınıfları çoğunlukla Illuminate\\Database\\Eloquent\\Model sınıfını genişletir.'
@@ -404,6 +407,7 @@ export class LaravelScanner {
       });
     };
 
+    const scannedClasses = new Set([...classes.keys()].map((name) => name.toLowerCase()));
     for (const { parsed, source, file } of classes.values()) {
       const owner = findClassNode(parsed.qualifiedName);
       if (!owner) continue;
@@ -460,6 +464,22 @@ export class LaravelScanner {
         const target = ensureClassNode(dispatch.target, location, dispatch.type);
         const kind = dispatch.type === 'job' ? 'dispatches' : 'fires';
         addEdge(owner, target, kind, dispatch.type === 'job' ? 'dispatches' : 'fires', location, dispatch.type);
+      }
+      // Static calls and `new`: only to classes in the project, once per calling method, and not where
+      // a more specific edge (injection, dispatch, relationship) already says how the two meet.
+      const used = new Set<string>();
+      const linked = new Set([...edges.values()].filter((edge) => edge.source === owner.id).map((edge) => edge.target));
+      for (const usage of parsed.usages) {
+        if (/::dispatch/.test(usage.call)) continue;
+        const qualified = resolveClass(usage.target);
+        if (!scannedClasses.has(qualified.toLowerCase())) continue;
+        const target = findClassNode(qualified);
+        if (!target || target.id === owner.id || linked.has(target.id)) continue;
+        const key = `${target.id}|${usage.method ?? ''}`;
+        if (used.has(key)) continue;
+        used.add(key);
+        const location = { file, line: usage.line, preview: linePreview(source, usage.line) };
+        addEdge(owner, target, 'calls', usage.method ? `${usage.method}()` : 'uses', location, usage.call);
       }
       for (const binding of parsed.bindings) {
         const location = { file, line: binding.line, preview: linePreview(source, binding.line) };

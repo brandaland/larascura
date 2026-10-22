@@ -463,13 +463,13 @@ describe('LaraScura architecture webview', () => {
     expect(document.querySelector('.degree')?.textContent).toBe('in 2out 3');
     const connections = [...document.querySelectorAll('.connection')];
     expect(connections.map((row) => row.textContent)).toEqual([
-      '→validatesDeleteAccountRequest',
-      '→validatesCartRequest',
-      '→injectsAccountService',
-      '←handlesPOST /account/delete',
-      '←handlesGET /cart',
+      'routeGET /carthandles · cart',
+      'routePOST /account/deletehandles · delete',
+      'requestCartRequestvalidates · cart()',
+      'requestDeleteAccountRequestvalidates · delete()',
+      'serviceAccountServiceinjects',
     ]);
-    (connections[2] as unknown as { click(): void }).click();
+    (connections[4] as unknown as { click(): void }).click();
     expect(document.querySelector('#detailTitle')?.textContent).toBe('AccountService');
     expect(errors).toEqual([]);
     dom.window.close();
@@ -646,7 +646,7 @@ describe('LaraScura architecture webview', () => {
 
     expect([...document.querySelectorAll('.prop-chip')].map((chip) => chip.textContent)).toEqual(['orders', 'filters?']);
     expect(document.querySelector('.prop-chip.required')?.textContent).toBe('orders');
-    expect(document.querySelector('.connection')?.textContent).toBe('←rendersOrderController');
+    expect(document.querySelector('.connection')?.textContent).toBe('controllerOrderControllerrenders · index()');
     expect([...document.querySelectorAll('.layer-button .nav-label')].map((label) => label.textContent)).toEqual(['Controllers', 'Pages']);
     expect(document.querySelector('.node-badge')).toBeNull();
 

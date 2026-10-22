@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { explainSyntax, parseMiddlewareAliases, parsePhpClass, parseRoutes } from '../src/phpParser.js';
+import { conventionalTable, explainSyntax, parseMiddlewareAliases, parsePhpClass, parseRoutes } from '../src/phpParser.js';
 
 describe('Laravel PHP syntax parser', () => {
   it('maps route syntax to controller actions and middleware', () => {
@@ -469,5 +469,45 @@ describe('Laravel PHP syntax parser', () => {
       'HTTP adresini',
     );
     expect(explainSyntax('return $this->hasMany(Order::class);', 'en')).toContain('Eloquent relationship');
+  });
+  it('reads a model table, fillable, casts, hidden fields and scopes', () => {
+    const parsed = parsePhpClass('app/Models/OrderItem.php', [
+      '<?php',
+      'namespace App\\Models;',
+      'use Illuminate\\Database\\Eloquent\\Model;',
+      'class OrderItem extends Model {',
+      "  protected $fillable = ['order_id', 'qty'];",
+      "  protected $hidden = ['secret'];",
+      "  protected function casts(): array { return ['paid_at' => 'datetime', 'status' => OrderStatus::class]; }",
+      '  public function scopePaid($query) { return $query; }',
+      '}',
+    ].join('\n'));
+    expect(parsed?.model).toEqual({
+      table: 'order_items', tableFromConvention: true, fillable: ['order_id', 'qty'], guarded: [],
+      casts: [{ name: 'paid_at', type: 'datetime' }, { name: 'status', type: 'OrderStatus' }],
+      hidden: ['secret'], scopes: ['paid'],
+    });
+    expect(conventionalTable('Category')).toBe('categories');
+    expect(conventionalTable('Address')).toBe('addresses');
+  });
+
+  it('finds static calls and instantiations, with the method they appear in, outside comments', () => {
+    const parsed = parsePhpClass('app/Http/Controllers/BannerController.php', [
+      '<?php',
+      'namespace App\\Http\\Controllers;',
+      'use App\\Models\\Banner;',
+      'class BannerController extends Controller {',
+      '  public function index() {',
+      '    // Banner::fake() is only an example',
+      "    $banners = Banner::where('status', 1)->get();",
+      '    $parser = new \\App\\Support\\Parser();',
+      '    return self::make(static::class);',
+      '  }',
+      '}',
+    ].join('\n'));
+    expect(parsed?.usages).toEqual([
+      { target: 'App\\Models\\Banner', call: 'Banner::where()', method: 'index', line: 7 },
+      { target: 'App\\Support\\Parser', call: 'new \\App\\Support\\Parser', method: 'index', line: 8 },
+    ]);
   });
 });

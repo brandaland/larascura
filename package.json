@@ -209,7 +209,149 @@
           "description": "Run LaraScura Doctor: report missing controller methods and views, misspelled middleware, missing models, and duplicate routes in the Problems panel, with quick fixes."
         }
       }
-    }
+    },
+    "colors": [
+      {
+        "id": "larascura.layer.route",
+        "description": "Icon color for routes in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#22c55e",
+          "dark": "#22c55e",
+          "highContrast": "#22c55e",
+          "highContrastLight": "#22c55e"
+        }
+      },
+      {
+        "id": "larascura.layer.middleware",
+        "description": "Icon color for middleware in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#f59e0b",
+          "dark": "#f59e0b",
+          "highContrast": "#f59e0b",
+          "highContrastLight": "#f59e0b"
+        }
+      },
+      {
+        "id": "larascura.layer.request",
+        "description": "Icon color for Form Requests in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#f97316",
+          "dark": "#f97316",
+          "highContrast": "#f97316",
+          "highContrastLight": "#f97316"
+        }
+      },
+      {
+        "id": "larascura.layer.controller",
+        "description": "Icon color for controllers in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#3b82f6",
+          "dark": "#3b82f6",
+          "highContrast": "#3b82f6",
+          "highContrastLight": "#3b82f6"
+        }
+      },
+      {
+        "id": "larascura.layer.page",
+        "description": "Icon color for Inertia pages in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#42b883",
+          "dark": "#42b883",
+          "highContrast": "#42b883",
+          "highContrastLight": "#42b883"
+        }
+      },
+      {
+        "id": "larascura.layer.service",
+        "description": "Icon color for services in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#8b5cf6",
+          "dark": "#8b5cf6",
+          "highContrast": "#8b5cf6",
+          "highContrastLight": "#8b5cf6"
+        }
+      },
+      {
+        "id": "larascura.layer.repository",
+        "description": "Icon color for repositories in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#a855f7",
+          "dark": "#a855f7",
+          "highContrast": "#a855f7",
+          "highContrastLight": "#a855f7"
+        }
+      },
+      {
+        "id": "larascura.layer.model",
+        "description": "Icon color for models in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#ef4444",
+          "dark": "#ef4444",
+          "highContrast": "#ef4444",
+          "highContrastLight": "#ef4444"
+        }
+      },
+      {
+        "id": "larascura.layer.job",
+        "description": "Icon color for jobs in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#64748b",
+          "dark": "#64748b",
+          "highContrast": "#64748b",
+          "highContrastLight": "#64748b"
+        }
+      },
+      {
+        "id": "larascura.layer.event",
+        "description": "Icon color for events in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#eab308",
+          "dark": "#eab308",
+          "highContrast": "#eab308",
+          "highContrastLight": "#eab308"
+        }
+      },
+      {
+        "id": "larascura.layer.listener",
+        "description": "Icon color for listeners in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#14b8a6",
+          "dark": "#14b8a6",
+          "highContrast": "#14b8a6",
+          "highContrastLight": "#14b8a6"
+        }
+      },
+      {
+        "id": "larascura.layer.provider",
+        "description": "Icon color for service providers in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#ec4899",
+          "dark": "#ec4899",
+          "highContrast": "#ec4899",
+          "highContrastLight": "#ec4899"
+        }
+      },
+      {
+        "id": "larascura.layer.command",
+        "description": "Icon color for Artisan commands in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#06b6d4",
+          "dark": "#06b6d4",
+          "highContrast": "#06b6d4",
+          "highContrastLight": "#06b6d4"
+        }
+      },
+      {
+        "id": "larascura.layer.class",
+        "description": "Icon color for other classes in the LaraScura sidebar, matching the map.",
+        "defaults": {
+          "light": "#94a3b8",
+          "dark": "#94a3b8",
+          "highContrast": "#94a3b8",
+          "highContrastLight": "#94a3b8"
+        }
+      }
+    ]
   },
   "scripts": {
     "check": "npm run typecheck && npm test && npm run security:check",

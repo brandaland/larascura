@@ -77,7 +77,7 @@ export class GraphPanel {
       GraphPanel.current = undefined;
     }, null, context.subscriptions);
     this.panel.webview.onDidReceiveMessage(
-      async (message: { type?: string; nodeId?: string; edgeId?: string; index?: number; link?: number; key?: string; color?: string | null }) => {
+      async (message: { type?: string; nodeId?: string; edgeId?: string; index?: number; link?: number; line?: number; key?: string; color?: string | null }) => {
         if (message.type === 'ready') {
           this.ready = true;
           this.postGraph();
@@ -98,6 +98,12 @@ export class GraphPanel {
         if (message.type === 'openNode' && message.nodeId) {
           const node = this.graph.nodes.find((candidate) => candidate.id === message.nodeId);
           if (node) await this.openLocation(node.location);
+          return;
+        }
+        // A method inside the node's own file; the line comes from the scan, the file never from the webview.
+        if (message.type === 'openNodeLine' && message.nodeId && Number.isInteger(message.line)) {
+          const node = this.graph.nodes.find((candidate) => candidate.id === message.nodeId);
+          if (node && !node.external) await this.openLocation({ file: node.location.file, line: message.line as number });
           return;
         }
         if (message.type === 'openEdge' && message.edgeId) {
@@ -335,6 +341,18 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .connection-target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .connection-more { padding: 6px; color: var(--vscode-descriptionForeground); font-size: 10px; }
     .prop-list { display: flex; flex-wrap: wrap; gap: 5px; }
+    .connection.relation { grid-template-columns: 72px minmax(0, 1fr); row-gap: 1px; }
+    .connection-note { grid-column: 2; overflow: hidden; color: var(--vscode-descriptionForeground); font-size: 10px; line-height: 1.4; text-overflow: ellipsis; white-space: normal; }
+    button.connection-more { width: 100%; text-align: left; background: none; border: 0; cursor: pointer; color: var(--vscode-textLink-foreground); }
+    .fact { margin-top: 10px; }
+    .fact:first-of-type { margin-top: 0; }
+    .fact-title { margin-bottom: 5px; color: var(--vscode-descriptionForeground); font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+    .fact-code, .chip-code { font-family: var(--vscode-editor-font-family); font-size: 11px; }
+    .fact-note { margin-top: 8px !important; color: var(--vscode-descriptionForeground); font-size: 11px !important; }
+    .fact-note:empty { display: none; }
+    .chip-more { background: none; cursor: pointer; color: var(--vscode-textLink-foreground); }
+    .chip-link { background: none; cursor: pointer; }
+    .chip-link:hover { color: var(--vscode-textLink-foreground); border-color: var(--vscode-textLink-foreground); }
     .prop-chip { padding: 2px 7px; border: 1px solid var(--vscode-panel-border); border-radius: 999px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 10px; }
     .prop-chip.required { color: var(--vscode-foreground); border-color: color-mix(in srgb, var(--detail-color, #42b883) 60%, transparent); background: color-mix(in srgb, var(--detail-color, #42b883) 12%, transparent); }
     .emblem { display: block; width: 132px; height: 70px; margin: 0 0 14px; }
@@ -1379,21 +1397,29 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       detailContent.style.setProperty('--detail-color', colors[node.kind] || colors.class);
       const incoming = graph.edges.filter(edge => edge.target === node.id);
       const outgoing = graph.edges.filter(edge => edge.source === node.id);
+      const relations = [...outgoing, ...incoming].filter(edge => edge.kind === 'relates');
       detailContent.append(
         badge,
         text('h2', node.label),
         text('p', node.qualifiedName || '', 'qualified'),
         degreeMeter(incoming.length, outgoing.length),
-        section('What is this?', node.summary)
+        section('In your project', nodeStory(node, incoming, outgoing)),
+        section('What is ' + article(displayKind(node.kind)) + ' ' + displayKind(node.kind) + '?', node.summary + (kindDescriptions[node.kind] ? ' ' + kindDescriptions[node.kind] : ''))
       );
       if (node.unused) {
         detailContent.append(section('Probably unused', 'No controller, route or closure in the scanned code renders this page. If a package such as Jetstream renders it, keep it; otherwise it may be safe to remove.'));
       }
       if (node.props?.length) detailContent.append(propsSection(node.props));
-      if (incoming.length || outgoing.length) detailContent.append(connectionSection(incoming, outgoing));
+      if (node.details?.model) detailContent.append(databaseSection(node, node.details.model));
+      if (relations.length) detailContent.append(relationsSection(node, relations));
+      const usedBy = incoming.filter(edge => edge.kind !== 'relates');
+      const uses = outgoing.filter(edge => edge.kind !== 'relates');
+      if (usedBy.length) detailContent.append(peersSection(usedBy, 'source', node.kind === 'route' ? 'Reached from' : 'Used by'));
+      if (uses.length) detailContent.append(peersSection(uses, 'target', node.kind === 'route' ? 'Goes through' : 'Uses'));
+      if (node.details) detailContent.append(anatomySection(node));
       detailContent.append(
         section('Laravel syntax', node.syntax, node.location.preview),
-        section('Source', node.location.file + ':' + node.location.line),
+        section('Source', relativePath(node.location.file) + ':' + node.location.line),
         sourceButton('node', node.id)
       );
       if (node.kind === 'route') {
@@ -1402,6 +1428,216 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         play.addEventListener('click', () => startJourney(node.id));
         detailContent.append(play);
       }
+    }
+
+    function article(word) {
+      return /^[aeiou]/i.test(word) ? 'an' : 'a';
+    }
+
+    function relativePath(file) {
+      const root = graph.root.endsWith('/') ? graph.root : graph.root + '/';
+      return file.startsWith(root) ? file.slice(root.length) : file;
+    }
+
+    function listNames(names, limit = 3) {
+      const unique = [...new Set(names)];
+      if (unique.length <= limit) return unique.join(', ').replace(/, ([^,]*)$/, ' and $1');
+      return unique.slice(0, limit).join(', ') + ' and ' + (unique.length - limit) + ' more';
+    }
+
+    function plural(count, word) {
+      return count + ' ' + word + (count === 1 ? '' : 's');
+    }
+
+    // A few plain sentences about this node in this project, built from what the scan found.
+    function nodeStory(node, incoming, outgoing) {
+      const byId = new Map(graph.nodes.map(candidate => [candidate.id, candidate]));
+      const peers = (edges, side, kinds) => edges
+        .filter(edge => !kinds || kinds.includes(edge.kind))
+        .map(edge => byId.get(edge[side]))
+        .filter(Boolean);
+      const sentences = [];
+      const model = node.details?.model;
+      if (model) {
+        sentences.push(node.label + ' rows live in the ' + model.table + ' table'
+          + (model.tableFromConvention ? ' (Laravel derives the name from the class; $table is not set).' : ' (set with $table).'));
+        const belongs = outgoing.filter(edge => edge.kind === 'relates' && edge.label === 'belongsTo').map(edge => byId.get(edge.target)?.label).filter(Boolean);
+        const has = outgoing.filter(edge => edge.kind === 'relates' && edge.label !== 'belongsTo').map(edge => byId.get(edge.target)?.label).filter(Boolean);
+        if (belongs.length) sentences.push('Each ' + node.label + ' belongs to ' + listNames(belongs) + '.');
+        if (has.length) sentences.push('It has related ' + listNames(has) + '.');
+      }
+      if (node.kind === 'route') {
+        const controller = peers(outgoing, 'target', ['handles'])[0];
+        const middleware = peers(outgoing, 'target', ['middleware']);
+        if (controller) sentences.push('Handled by ' + controller.label + '.');
+        if (middleware.length) sentences.push('Passes through ' + plural(middleware.length, 'middleware') + ' first: ' + listNames(middleware.map(peer => peer.label), 4) + '.');
+      } else if (node.kind === 'controller') {
+        const routes = peers(incoming, 'source', ['handles']);
+        const pages = peers(outgoing, 'target', ['renders']);
+        const models = peers(outgoing, 'target').filter(peer => peer.kind === 'model');
+        if (routes.length) sentences.push('Handles ' + plural(routes.length, 'route') + ', for example ' + listNames(routes.map(route => route.label), 2) + '.');
+        else sentences.push('No scanned route points to this controller.');
+        if (pages.length) sentences.push('Renders ' + listNames(pages.map(page => page.label)) + '.');
+        if (models.length) sentences.push('Works with the ' + listNames(models.map(peer => peer.label)) + ' model' + (new Set(models).size === 1 ? '' : 's') + '.');
+      } else if (node.kind === 'page') {
+        const renderers = peers(incoming, 'source', ['renders']);
+        if (renderers.length) sentences.push('Rendered by ' + listNames(renderers.map(peer => peer.label)) + '.');
+      } else if (node.kind !== 'model') {
+        const users = [...new Set(peers(incoming, 'source'))];
+        if (users.length) sentences.push('Used by ' + plural(users.length, 'class') + ': ' + listNames(users.map(peer => peer.label)) + '.');
+      }
+      if (node.kind === 'model') {
+        const users = [...new Set(peers(incoming, 'source').filter(peer => peer.kind !== 'model'))];
+        if (users.length) sentences.push('Read or written by ' + plural(users.length, 'class') + ': ' + listNames(users.map(peer => peer.label)) + '.');
+        else sentences.push('No scanned class uses it directly yet.');
+      }
+      if (!sentences.length) sentences.push(incoming.length || outgoing.length
+        ? 'Connected to ' + plural(new Set([...incoming.map(edge => edge.source), ...outgoing.map(edge => edge.target)]).size, 'node') + ' in the map.'
+        : 'Nothing in the scanned code connects to it yet.');
+      return sentences.join(' ');
+    }
+
+    function chipList(values, className, limit = 18) {
+      const list = document.createElement('div');
+      list.className = 'prop-list';
+      values.slice(0, limit).forEach(value => list.append(text('span', value, 'prop-chip ' + (className || ''))));
+      if (values.length > limit) {
+        const more = text('button', '+' + (values.length - limit) + ' more', 'prop-chip chip-more');
+        more.type = 'button';
+        more.addEventListener('click', () => list.replaceWith(chipList(values, className, Infinity)));
+        list.append(more);
+      }
+      return list;
+    }
+
+    function labelled(title, body) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'fact';
+      wrapper.append(text('div', title, 'fact-title'), body);
+      return wrapper;
+    }
+
+    function databaseSection(node, model) {
+      const wrapper = document.createElement('section');
+      wrapper.className = 'section';
+      wrapper.append(text('h3', 'Database'));
+      wrapper.append(labelled('Table', text('code', model.table, 'fact-code')));
+      if (model.fillable.length) {
+        wrapper.append(labelled('Mass assignable · ' + model.fillable.length, chipList(model.fillable)));
+      } else if (model.guarded.length) {
+        wrapper.append(labelled('Guarded', chipList(model.guarded)));
+      }
+      if (!model.fillable.length && !model.guarded.length) {
+        wrapper.append(text('p', 'No $fillable or $guarded list: check how create() and update() receive request data.', 'fact-note'));
+      }
+      if (model.casts.length) wrapper.append(labelled('Casts', chipList(model.casts.map(cast => cast.name + ' → ' + cast.type.split(backslash).pop()))));
+      if (model.hidden.length) wrapper.append(labelled('Hidden from JSON', chipList(model.hidden)));
+      if (model.scopes.length) wrapper.append(labelled('Query scopes', chipList(model.scopes.map(scopeName => node.label + '::' + scopeName + '()'), 'chip-code')));
+      return wrapper;
+    }
+
+    const relationWords = {
+      belongsTo: (from, to) => 'Each ' + from + ' belongs to one ' + to + '.',
+      hasOne: (from, to) => 'Each ' + from + ' has one ' + to + '.',
+      hasMany: (from, to) => 'Each ' + from + ' has many ' + to + ' records.',
+      belongsToMany: (from, to) => from + ' and ' + to + ' are linked many-to-many through a pivot table.',
+      morphOne: (from, to) => 'Each ' + from + ' has one ' + to + ' through a polymorphic relation.',
+      morphMany: (from, to) => 'Each ' + from + ' has many ' + to + ' records through a polymorphic relation.',
+      morphToMany: (from, to) => from + ' and ' + to + ' are linked many-to-many through a polymorphic pivot.'
+    };
+
+    function relationsSection(node, edges) {
+      const byId = new Map(graph.nodes.map(candidate => [candidate.id, candidate]));
+      const list = document.createElement('div');
+      list.className = 'connection-list';
+      edges.forEach(edge => {
+        const source = byId.get(edge.source);
+        const target = byId.get(edge.target);
+        if (!source || !target) return;
+        const other = source.id === node.id ? target : source;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'connection relation';
+        const kind = text('span', edge.label, 'connection-kind');
+        kind.style.setProperty('--kind-color', colors[other.kind] || colors.class);
+        const describe = relationWords[edge.label];
+        button.append(kind, text('span', other.label, 'connection-target'),
+          text('span', describe ? describe(source.label, target.label) : edge.explanation, 'connection-note'));
+        button.title = edge.explanation;
+        button.addEventListener('click', () => focusNode(other.id));
+        list.append(button);
+      });
+      const wrapper = document.createElement('section');
+      wrapper.className = 'section';
+      wrapper.append(text('h3', 'Relationships'), list);
+      return wrapper;
+    }
+
+    // One row per connected node, listing the methods or labels the connections come from.
+    function peersSection(edges, side, title) {
+      const limit = 12;
+      const byId = new Map(graph.nodes.map(candidate => [candidate.id, candidate]));
+      const rows = new Map();
+      edges.forEach(edge => {
+        const other = byId.get(edge[side]);
+        if (!other) return;
+        const row = rows.get(other.id) || { other, kinds: new Set(), labels: new Set(), edge };
+        row.kinds.add(edge.kind);
+        if (edge.label && !['uses', 'injects', 'listens', 'fires', 'dispatches'].includes(edge.label)) row.labels.add(edge.label);
+        rows.set(other.id, row);
+      });
+      const sorted = [...rows.values()].sort((left, right) =>
+        lifecycleOrder.indexOf(left.other.kind) - lifecycleOrder.indexOf(right.other.kind) || left.other.label.localeCompare(right.other.label));
+      const list = document.createElement('div');
+      list.className = 'connection-list';
+      const addRow = ({ other, kinds, labels, edge }) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'connection relation';
+        const kind = text('span', displayKind(other.kind), 'connection-kind');
+        kind.style.setProperty('--kind-color', colors[other.kind] || colors.class);
+        const via = [...kinds].join(', ') + (labels.size ? ' · ' + [...labels].slice(0, 4).join(', ') + (labels.size > 4 ? '…' : '') : '');
+        button.append(kind, text('span', other.label, 'connection-target'), text('span', via, 'connection-note'));
+        button.title = edge.explanation;
+        button.addEventListener('click', () => focusNode(other.id));
+        list.append(button);
+      };
+      sorted.slice(0, limit).forEach(addRow);
+      if (sorted.length > limit) {
+        const more = text('button', 'Show ' + (sorted.length - limit) + ' more', 'connection-more');
+        more.type = 'button';
+        more.addEventListener('click', () => { more.remove(); sorted.slice(limit).forEach(addRow); });
+        list.append(more);
+      }
+      const wrapper = document.createElement('section');
+      wrapper.className = 'section';
+      wrapper.append(text('h3', title + ' · ' + sorted.length), list);
+      return wrapper;
+    }
+
+    // What the class is made of: its parent, traits and public methods, each a link into the file.
+    function anatomySection(node) {
+      const details = node.details;
+      const wrapper = document.createElement('section');
+      wrapper.className = 'section';
+      wrapper.append(text('h3', 'Inside the class'));
+      const short = name => name.split(backslash).pop();
+      if (details.parent) wrapper.append(labelled('Extends', text('code', short(details.parent), 'fact-code')));
+      if (details.traits.length) wrapper.append(labelled('Traits', chipList(details.traits.map(short), 'chip-code')));
+      const methods = details.methods.filter(method => !method.name.startsWith('__'));
+      if (methods.length) {
+        const list = document.createElement('div');
+        list.className = 'prop-list';
+        methods.forEach(method => {
+          const chip = text('button', method.name + '()', 'prop-chip chip-code chip-link');
+          chip.type = 'button';
+          chip.title = 'Open line ' + method.line;
+          chip.addEventListener('click', () => vscode.postMessage({ type: 'openNodeLine', nodeId: node.id, line: method.line }));
+          list.append(chip);
+        });
+        wrapper.append(labelled('Public methods · ' + methods.length, list));
+      }
+      return wrapper.childElementCount > 1 ? wrapper : document.createDocumentFragment();
     }
 
     function degreeMeter(incomingCount, outgoingCount) {

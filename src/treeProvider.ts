@@ -1,10 +1,12 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { groupLabel, layerGroups } from './nodeGroups.js';
 import type { ArchitectureGraph, ArchitectureNode, NodeKind } from './types.js';
 
 type TreeEntry =
   | { type: 'action'; action: 'openMap' | 'doctor' }
   | { type: 'group'; kind: NodeKind; count: number }
+  | { type: 'folder'; kind: NodeKind; group: string; nodes: ArchitectureNode[] }
   | { type: 'node'; node: ArchitectureNode }
   | { type: 'empty' };
 
@@ -45,6 +47,10 @@ const icons: Record<NodeKind, string> = {
   class: 'symbol-class',
 };
 
+// The same colors as the map, contributed in package.json so themes can override them.
+const layerIcon = (kind: NodeKind, icon = icons[kind]): vscode.ThemeIcon =>
+  new vscode.ThemeIcon(icon, new vscode.ThemeColor(`larascura.layer.${kind}`));
+
 export class ArchitectureTreeProvider implements vscode.TreeDataProvider<TreeEntry> {
   private readonly changes = new vscode.EventEmitter<TreeEntry | undefined | void>();
   private graph: ArchitectureGraph | undefined;
@@ -77,7 +83,13 @@ export class ArchitectureTreeProvider implements vscode.TreeDataProvider<TreeEnt
         `${element.kind === 'page' && this.graph?.pageFramework ? `${this.graph.pageFramework} Pages` : labels[element.kind] ?? element.kind} (${element.count})`,
         vscode.TreeItemCollapsibleState.Collapsed,
       );
-      item.iconPath = new vscode.ThemeIcon(icons[element.kind]);
+      item.iconPath = layerIcon(element.kind);
+      return item;
+    }
+    if (element.type === 'folder') {
+      const item = new vscode.TreeItem(groupLabel(element.kind, element.group), vscode.TreeItemCollapsibleState.Collapsed);
+      item.description = String(element.nodes.length);
+      item.iconPath = layerIcon(element.kind, 'folder');
       return item;
     }
 
@@ -86,7 +98,7 @@ export class ArchitectureTreeProvider implements vscode.TreeDataProvider<TreeEnt
     item.tooltip = new vscode.MarkdownString(
       `**${element.node.kind}**  \n${element.node.summary}  \n\n${element.node.location.file}:${element.node.location.line}`,
     );
-    item.iconPath = new vscode.ThemeIcon(icons[element.node.kind]);
+    item.iconPath = layerIcon(element.node.kind);
     item.command = {
       command: 'larascura.openNode',
       title: 'Open Source',
@@ -109,9 +121,11 @@ export class ArchitectureTreeProvider implements vscode.TreeDataProvider<TreeEnt
           .map(([kind, count]): TreeEntry => ({ type: 'group', kind, count })),
       ];
     }
+    if (element.type === 'folder') return element.nodes.map((node) => ({ type: 'node', node }));
     if (element.type !== 'group') return [];
-    return this.graph.nodes
-      .filter((node) => node.kind === element.kind)
-      .map((node) => ({ type: 'node', node }));
+    // A layer spread over several folders opens into those folders, like the map's navigator.
+    const groups = layerGroups(this.graph.nodes, element.kind);
+    if (groups.length > 1) return groups.map(({ group, nodes }) => ({ type: 'folder', kind: element.kind, group, nodes }));
+    return (groups[0]?.nodes ?? []).map((node) => ({ type: 'node', node }));
   }
 }

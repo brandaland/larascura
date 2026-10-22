@@ -1,4 +1,4 @@
-import type { NodeKind, ParsedClass, ParsedMiddlewareAlias, ParsedRoute, ViewReference } from './types.js';
+import type { ModelDetails, NodeKind, ParsedClass, ParsedMiddlewareAlias, ParsedRoute, ViewReference } from './types.js';
 
 export const lineNumber = (source: string, index: number): number =>
   source.slice(0, Math.max(0, index)).split('\n').length;
@@ -306,6 +306,65 @@ export const viewReferences = (source: string): ViewReference[] => {
   return references.sort((left, right) => left.line - right.line);
 };
 
+// Laravel's default table name: snake_case and plural (OrderItem → order_items, Category → categories).
+export const conventionalTable = (className: string): string => {
+  const snake = className.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+  if (/[^aeiou]y$/.test(snake)) return `${snake.slice(0, -1)}ies`;
+  if (/(s|x|z|ch|sh)$/.test(snake)) return `${snake}es`;
+  return `${snake}s`;
+};
+
+const modelDetailsFrom = (source: string, className: string, methods: ParsedMethod[]): ModelDetails => {
+  const list = (property: string): string[] =>
+    arrayBodyAfter(source, new RegExp(`\\$${property}\\s*=\\s*\\[`, 'g')).flatMap(({ body }) => stringsFrom(body));
+  // $casts = [...] or, since Laravel 11, a casts() method returning the same array.
+  const castBodies = [
+    ...arrayBodyAfter(source, /\$casts\s*=\s*\[/g),
+    ...arrayBodyAfter(source, /function\s+casts\s*\([^)]*\)[^{]*\{[^[]*?return\s*\[/g),
+  ];
+  const casts = castBodies.flatMap(({ body }) =>
+    [...body.matchAll(/['"](\w+)['"]\s*=>\s*([^,\n]+)/g)].map((match) => ({
+      name: match[1] ?? '',
+      type: (match[2] ?? '').trim().replace(/^['"]|['"]$/g, '').replace(/::class$/, ''),
+    })));
+  const table = /\$table\s*=\s*['"]([\w.]+)['"]/.exec(source)?.[1];
+  const scopes = methods
+    .filter((method) => /^scope[A-Z]/.test(method.name))
+    .map((method) => method.name.charAt(5).toLowerCase() + method.name.slice(6));
+  return {
+    table: table ?? conventionalTable(className),
+    tableFromConvention: !table,
+    fillable: list('fillable'),
+    guarded: list('guarded'),
+    casts,
+    hidden: list('hidden'),
+    scopes,
+  };
+};
+
+const notUsages = new Set(['self', 'static', 'parent']);
+
+/** X::method() and new X: the classes this one reaches for directly, beyond what it injects. */
+const usagesFrom = (source: string, imports: Map<string, string>, namespace: string, methods: ParsedMethod[]): ParsedClass['usages'] => {
+  const usages: ParsedClass['usages'] = [];
+  const methodAt = (index: number): string | undefined => methods.filter((method) => method.index <= index).at(-1)?.name;
+  const add = (name: string | undefined, call: string, index: number): void => {
+    if (!name || notUsages.has(name) || !/^\\?[A-Z]/.test(name)) return;
+    usages.push({ target: resolveName(name, imports, namespace), call, method: methodAt(index), line: lineNumber(source, index) });
+  };
+  // Comments and strings would otherwise turn examples into usages.
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '))
+    .replace(/(^|[^:])\/\/[^\n]*/g, (comment, prefix: string) => prefix + ' '.repeat(comment.length - prefix.length));
+  for (const match of code.matchAll(/(?<![\w\\$>])(\\?[A-Za-z_][\w\\]*)::(?!class\b)([A-Za-z_]\w*)\s*\(/g)) {
+    add(match[1], `${match[1]}::${match[2]}()`, match.index ?? 0);
+  }
+  for (const match of code.matchAll(/\bnew\s+(\\?[A-Za-z_][\w\\]*)/g)) {
+    add(match[1], `new ${match[1]}`, match.index ?? 0);
+  }
+  return usages;
+};
+
 export const parsePhpClass = (file: string, source: string): ParsedClass | undefined => {
   const namespace = namespaceFrom(source);
   const imports = importsFrom(source);
@@ -424,6 +483,8 @@ export const parsePhpClass = (file: string, source: string): ParsedClass | undef
     relations,
     dispatches,
     bindings,
+    usages: usagesFrom(source, imports, namespace, methods),
+    model: kind === 'model' ? modelDetailsFrom(source, name, methods) : undefined,
   };
 };
 

@@ -48,6 +48,26 @@ export interface ArchitectureNode {
   props?: Array<{ name: string; required: boolean }>;
   /** Set from a Doctor finding: nothing in the scanned code renders this page. */
   unused?: boolean;
+  /** What the class declares, shown in the Inspector. */
+  details?: ClassDetails;
+}
+
+export interface ClassDetails {
+  parent?: string;
+  traits: string[];
+  methods: Array<{ name: string; line: number }>;
+  model?: ModelDetails;
+}
+
+export interface ModelDetails {
+  table: string;
+  /** True when $table is not set and the name follows Laravel's convention (snake_case plural). */
+  tableFromConvention: boolean;
+  fillable: string[];
+  guarded: string[];
+  casts: Array<{ name: string; type: string }>;
+  hidden: string[];
+  scopes: string[];
 }
 
 export interface ArchitectureEdge {
@@ -114,6 +134,9 @@ export interface ParsedClass {
   relations: Array<{ type: string; target: string; line: number }>;
   dispatches: Array<{ type: 'job' | 'event'; target: string; line: number }>;
   bindings: Array<{ abstract: string; concrete: string; line: number }>;
+  /** Static calls (X::where()) and instantiations (new X) of other classes, with the method they appear in. */
+  usages: Array<{ target: string; call: string; method?: string; line: number }>;
+  model?: ModelDetails;
 }
 
 export interface ViewReference {
