@@ -134,6 +134,7 @@ describe('LaraScura architecture webview', () => {
 
   it('groups a layer by folder and leads back to the overview', async () => {
     const errors: string[] = [];
+    const messages: unknown[] = [];
     const virtualConsole = new VirtualConsole();
     virtualConsole.on('jsdomError', (error) => errors.push(error.message));
     const dom = new JSDOM(createGraphHtml('test-nonce'), {
@@ -142,7 +143,7 @@ describe('LaraScura architecture webview', () => {
       virtualConsole,
       beforeParse(window) {
         Object.assign(window, {
-          acquireVsCodeApi: () => ({ postMessage: () => undefined, getState: () => undefined, setState: () => undefined }),
+          acquireVsCodeApi: () => ({ postMessage: (message: unknown) => messages.push(message), getState: () => undefined, setState: () => undefined }),
         });
       },
     });
@@ -180,11 +181,17 @@ describe('LaraScura architecture webview', () => {
     expect(folders).toEqual(['Controllers/', 'Admin/', 'Razorpay/Api/']);
     expect([...document.querySelectorAll('.group-label')].map((element) => element.textContent)).toEqual(['Controllers/1', 'Admin/2', 'Razorpay/Api/1']);
 
-    click('.group-label', 'Admin/');
+    click('.group-name', 'Admin/');
     expect(document.querySelector('#scopeName')?.textContent).toBe('Admin/');
     expect(document.querySelectorAll('.node')).toHaveLength(2);
     expect(document.querySelector('.group-item.active')?.textContent).toContain('Admin/');
     expect(document.querySelector('#crumbs')?.textContent).toBe('← Overview›Controllers›');
+
+    (document.querySelector('.group-swatch') as { click(): void } | null)?.click();
+    click('.context-item', 'Blue');
+    expect(messages).toContainEqual({ type: 'setGroupColor', key: 'controller:Admin', color: '#007aff' });
+    expect(document.querySelectorAll('.node.tinted')).toHaveLength(2);
+    expect(document.querySelector('.group-swatch')?.classList.contains('colored')).toBe(true);
 
     click('.crumb', 'Overview');
     expect(document.querySelector('#scopeName')?.textContent).toBe('Architecture overview');

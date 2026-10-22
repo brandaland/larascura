@@ -6,11 +6,14 @@ const nonce = (): string => {
   return Array.from({ length: 32 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
 };
 
+const GROUP_COLORS_KEY = 'larascura.groupColors';
+
 export class GraphPanel {
   private static current: GraphPanel | undefined;
   private readonly panel: vscode.WebviewPanel;
   private graph: ArchitectureGraph;
   private readonly onRefresh: () => Promise<ArchitectureGraph>;
+  private readonly context: vscode.ExtensionContext;
   private ready = false;
   private pendingFocus: { nodeId: string; journey: boolean } | undefined;
 
@@ -58,6 +61,7 @@ export class GraphPanel {
   ) {
     this.graph = graph;
     this.onRefresh = onRefresh;
+    this.context = context;
     this.panel = vscode.window.createWebviewPanel(
       'larascura.map',
       `LaraScura — ${graph.projectName}`,
@@ -73,7 +77,7 @@ export class GraphPanel {
       GraphPanel.current = undefined;
     }, null, context.subscriptions);
     this.panel.webview.onDidReceiveMessage(
-      async (message: { type?: string; nodeId?: string; edgeId?: string; index?: number; link?: number }) => {
+      async (message: { type?: string; nodeId?: string; edgeId?: string; index?: number; link?: number; key?: string; color?: string | null }) => {
         if (message.type === 'ready') {
           this.ready = true;
           this.postGraph();
@@ -101,6 +105,14 @@ export class GraphPanel {
           if (edge) await this.openLocation(edge.location);
           return;
         }
+        // Folder colors belong to the project, so they are kept in workspace state and survive reloads.
+        if (message.type === 'setGroupColor' && typeof message.key === 'string' && message.key.length <= 300) {
+          const colors = { ...this.groupColors() };
+          if (typeof message.color === 'string' && /^#[0-9a-f]{6}$/i.test(message.color)) colors[message.key] = message.color;
+          else delete colors[message.key];
+          await this.context.workspaceState.update(GROUP_COLORS_KEY, colors);
+          return;
+        }
         // Findings are addressed by index so the webview can only open locations the scanner produced.
         if (message.type === 'openFinding' && typeof message.index === 'number') {
           const finding = this.graph.findings[message.index];
@@ -119,7 +131,11 @@ export class GraphPanel {
   }
 
   private postGraph(): void {
-    void this.panel.webview.postMessage({ type: 'graph', graph: this.graph });
+    void this.panel.webview.postMessage({ type: 'graph', graph: this.graph, groupColors: this.groupColors() });
+  }
+
+  private groupColors(): Record<string, string> {
+    return this.context.workspaceState.get<Record<string, string>>(GROUP_COLORS_KEY, {});
   }
 
   private async openLocation(location: { file: string; line: number }): Promise<void> {
@@ -198,12 +214,23 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     .crumb:hover { background: var(--vscode-list-hoverBackground); }
     .crumb-home { font-weight: 600; }
     .crumb-sep { opacity: .6; }
-    .group-item { display: grid; width: calc(100% - 30px); min-height: 24px; margin-left: 30px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 2px 8px; color: var(--vscode-foreground); background: transparent; border: 0; border-left: 2px solid color-mix(in srgb, var(--layer-color) 40%, transparent); border-radius: 0 6px 6px 0; font-family: var(--vscode-editor-font-family); font-size: 11px; text-align: left; cursor: pointer; }
+    .group-item { display: grid; width: calc(100% - 30px); min-height: 24px; margin-left: 30px; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 2px 8px; color: var(--vscode-foreground); background: transparent; border: 0; border-left: 2px solid color-mix(in srgb, var(--layer-color) 40%, transparent); border-radius: 0 6px 6px 0; font-family: var(--vscode-editor-font-family); font-size: 11px; text-align: left; cursor: pointer; }
     .group-item:hover { background: var(--vscode-list-hoverBackground); }
     .group-item.active { color: var(--vscode-list-activeSelectionForeground); background: var(--vscode-list-activeSelectionBackground); border-left-color: var(--layer-color); }
-    .group-label { position: absolute; display: flex; align-items: baseline; gap: 8px; padding: 0 0 4px; color: var(--vscode-foreground); background: none; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--group-color) 35%, transparent); font-family: var(--vscode-editor-font-family); font-size: 12px; font-weight: 650; text-align: left; cursor: pointer; }
-    .group-label:hover { color: var(--vscode-textLink-foreground); }
-    .group-label .nav-count { font-weight: 400; }
+    .group-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dot, transparent); }
+    .group-label { position: absolute; display: flex; align-items: center; gap: 9px; padding: 0 0 6px; color: var(--vscode-foreground); border-bottom: 2px solid color-mix(in srgb, var(--group-color) 40%, transparent); font-family: var(--vscode-editor-font-family); font-size: 15px; font-weight: 700; }
+    .group-name { min-width: 0; padding: 0; overflow: hidden; color: inherit; background: none; border: 0; font: inherit; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+    button.group-name { cursor: pointer; }
+    button.group-name:hover { color: var(--vscode-textLink-foreground); }
+    .group-label .nav-count { flex: none; font-size: 11px; font-weight: 400; }
+    .group-swatch { flex: none; width: 13px; height: 13px; padding: 0; background: transparent; border: 1.5px solid var(--vscode-descriptionForeground); border-radius: 50%; opacity: .55; cursor: pointer; transition: transform .12s ease, opacity .12s ease; }
+    .group-swatch:hover, .group-swatch:focus-visible { opacity: 1; transform: scale(1.15); }
+    .group-swatch.colored { background: var(--group-color); border-color: var(--group-color); opacity: 1; }
+    .node.tinted:not(:hover):not(.active) { background: color-mix(in srgb, var(--tint) 13%, var(--vscode-editorWidget-background)); }
+    .node.tinted::after { content: ''; position: absolute; top: 9px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--tint); }
+    .node.tinted.unused::after { display: none; }
+    .context-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--swatch); vertical-align: middle; }
+    .color-input { position: fixed; bottom: 0; left: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
     .viewport { position: relative; overflow: auto; background-image: radial-gradient(var(--vscode-panel-border) 0.7px, transparent 0.7px); background-size: 18px 18px; }
     .stage { position: relative; transform-origin: top left; }
     .edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
@@ -510,6 +537,51 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       return [...groups.entries()]
         .sort(([left], [right]) => (left === '' || left === 'root' ? -1 : right === '' || right === 'root' ? 1 : left.localeCompare(right)))
         .map(([group, nodes]) => ({ group, nodes }));
+    }
+
+    // Finder's tag colors, so folders can be marked the way people already mark them on a Mac.
+    const groupPalette = [
+      ['Red', '#ff3b30'], ['Orange', '#ff9500'], ['Yellow', '#ffcc00'], ['Green', '#34c759'],
+      ['Blue', '#007aff'], ['Purple', '#af52de'], ['Gray', '#8e8e93']
+    ];
+    let groupColors = {};
+
+    function groupColor(kind, group) {
+      return groupColors[kind + ':' + group];
+    }
+
+    // Live changes from the color picker repaint without saving; the extension stores the final color.
+    function setGroupColor(kind, group, color, persist = true) {
+      const key = kind + ':' + group;
+      if (color) groupColors[key] = color;
+      else delete groupColors[key];
+      if (persist) vscode.postMessage({ type: 'setGroupColor', key, color: color || null });
+      renderTree();
+      render();
+    }
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.className = 'color-input';
+    colorInput.tabIndex = -1;
+    colorInput.setAttribute('aria-hidden', 'true');
+    document.body.append(colorInput);
+    let colorTarget = null;
+    colorInput.addEventListener('input', () => { if (colorTarget) setGroupColor(colorTarget.kind, colorTarget.group, colorInput.value, false); });
+    colorInput.addEventListener('change', () => { if (colorTarget) setGroupColor(colorTarget.kind, colorTarget.group, colorInput.value); });
+
+    function showGroupColorMenu(clientX, clientY, kind, group) {
+      const current = groupColor(kind, group);
+      const items = groupPalette.map(([name, hex]) => ({
+        swatch: hex, label: name + (current === hex ? '  ✓' : ''), run: () => setGroupColor(kind, group, hex)
+      }));
+      items.push('separator', { icon: '✎', label: 'Custom color…', run: () => {
+        colorTarget = { kind, group };
+        colorInput.value = current || colors[kind] || colors.class;
+        colorInput.click();
+      } });
+      if (current) items.push({ icon: '✕', label: 'Remove color', run: () => setGroupColor(kind, group, null) });
+      showContextMenu(clientX, clientY, groupLabel(kind, group), items);
     }
 
     function scopeKey(value) {
@@ -877,8 +949,15 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
             item.className = 'group-item' + (isActiveScope(groupScope) ? ' active' : '');
             item.style.setProperty('--layer-color', colors[kind] || colors.class);
             item.title = groupLabel(kind, group) + ' · ' + nodes.length;
-            item.append(text('span', groupLabel(kind, group), 'nav-label'), text('span', String(nodes.length), 'nav-count'));
+            const dot = text('span', '', 'group-dot');
+            if (groupColor(kind, group)) dot.style.setProperty('--dot', groupColor(kind, group));
+            item.append(dot, text('span', groupLabel(kind, group), 'nav-label'), text('span', String(nodes.length), 'nav-count'));
             item.addEventListener('click', () => activateScope(groupScope));
+            item.addEventListener('contextmenu', event => {
+              event.preventDefault();
+              event.stopPropagation();
+              showGroupColorMenu(event.clientX, event.clientY, kind, group);
+            });
             axis.append(item);
           });
         }
@@ -1148,19 +1227,31 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       }
       for (const heading of layout.headings || []) {
         const { kind, group, total } = heading.section;
-        const opensGroup = scope.type === 'kind';
-        const label = document.createElement(opensGroup ? 'button' : 'div');
-        if (opensGroup) {
-          label.type = 'button';
-          label.title = 'Show only ' + groupLabel(kind, group);
-          label.addEventListener('click', () => activateScope({ type: 'group', value: kind, group }));
-        }
+        const custom = groupColor(kind, group);
+        const label = document.createElement('div');
         label.className = 'group-label';
+        label.dataset.kind = kind;
+        label.dataset.group = group;
         label.style.left = heading.x + 'px';
         label.style.top = heading.y + 'px';
         label.style.width = heading.width + 'px';
-        label.style.setProperty('--group-color', colors[kind] || colors.class);
-        label.append(text('span', groupLabel(kind, group), 'nav-label'), text('span', String(total), 'nav-count'));
+        label.style.setProperty('--group-color', custom || colors[kind] || colors.class);
+        const swatch = text('button', '', 'group-swatch' + (custom ? ' colored' : ''));
+        swatch.type = 'button';
+        swatch.title = 'Color this folder';
+        swatch.setAttribute('aria-label', 'Color ' + groupLabel(kind, group));
+        swatch.addEventListener('click', () => {
+          const bounds = swatch.getBoundingClientRect();
+          showGroupColorMenu(bounds.left, bounds.bottom + 4, kind, group);
+        });
+        const opensGroup = scope.type === 'kind';
+        const name = text(opensGroup ? 'button' : 'span', groupLabel(kind, group), 'group-name');
+        if (opensGroup) {
+          name.type = 'button';
+          name.title = 'Show only ' + groupLabel(kind, group);
+          name.addEventListener('click', () => activateScope({ type: 'group', value: kind, group }));
+        }
+        label.append(swatch, name, text('span', String(total), 'nav-count'));
         nodesRoot.appendChild(label);
       }
       for (const { node, x: autoX, y: autoY } of layout.placements) {
@@ -1176,6 +1267,11 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         button.style.setProperty('--node-color', colors[node.kind] || colors.class);
         button.dataset.nodeId = node.id;
         button.append(text('span', displayKind(node.kind), 'node-kind'), text('span', node.label, 'node-label'));
+        const tint = node.aggregateKind ? null : groupColor(node.kind, nodeGroup(node));
+        if (tint) {
+          button.classList.add('tinted');
+          button.style.setProperty('--tint', tint);
+        }
         if (node.unused) {
           button.classList.add('unused');
           const badge = text('span', 'unused', 'node-badge');
@@ -1818,6 +1914,7 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
       }
       if (event.data?.type !== 'graph') return;
       graph = event.data.graph;
+      groupColors = { ...(event.data.groupColors || {}) };
       // "Vue Pages" says at a glance that this layer is what users see, and in which framework.
       kindLabels.page = graph.pageFramework ? graph.pageFramework + ' Pages' : 'Pages';
       document.title = 'LaraScura — ' + graph.projectName;
@@ -1862,7 +1959,13 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
         button.type = 'button';
         button.className = 'context-item';
         button.setAttribute('role', 'menuitem');
-        button.append(text('span', item.icon, 'context-icon'), text('span', item.label));
+        const icon = text('span', item.swatch ? '' : item.icon, 'context-icon');
+        if (item.swatch) {
+          const swatch = text('span', '', 'context-swatch');
+          swatch.style.setProperty('--swatch', item.swatch);
+          icon.append(swatch);
+        }
+        button.append(icon, text('span', item.label));
         button.addEventListener('click', () => {
           hideContextMenu();
           item.run();
@@ -1905,6 +2008,11 @@ export const createGraphHtml = (token: string): string => `<!doctype html>
     }
     viewport.addEventListener('contextmenu', event => {
       event.preventDefault();
+      const heading = event.target.closest?.('.group-label');
+      if (heading) {
+        showGroupColorMenu(event.clientX, event.clientY, heading.dataset.kind, heading.dataset.group);
+        return;
+      }
       const nodeElement = event.target.closest?.('.node');
       const node = nodeElement && lastRendered?.nodes.find(candidate => candidate.id === nodeElement.dataset.nodeId);
       if (node) showContextMenu(event.clientX, event.clientY, node.label, nodeItems(node));
